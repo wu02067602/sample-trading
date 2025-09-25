@@ -1,0 +1,30 @@
+# 永豐金證券 API 自動交易程式依賴套件
+# BrokerageAuth 認證模組所需套件
+
+# 永豐金證券官方 Python SDK
+shioaji>=1.1.0
+
+# HTTP 請求處理（shioaji 的依賴，明確列出）
+requests>=2.25.0
+
+# 日期時間處理（Python 標準庫，但明確列出版本需求）
+# datetime - 內建模組
+
+# 日誌處理（Python 標準庫）
+# logging - 內建模組
+
+# 作業系統介面（Python 標準庫）
+# os - 內建模組
+
+# 型別提示支援（Python 3.5+ 內建，但為了向下相容）
+typing>=3.7.0;python_version<"3.9"
+
+# 開發和測試工具（可選）
+pytest>=6.0.0
+pytest-cov>=2.10.0
+black>=21.0.0
+flake8>=3.8.0
+mypy>=0.812
+
+# 安全相關
+cryptography>=3.0.0
