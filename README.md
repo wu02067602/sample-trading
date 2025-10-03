@@ -6,9 +6,11 @@
 
 - ✅ 簡潔的 YAML 配置檔案管理
 - ✅ 自動驗證必填欄位
+- ✅ 永豐 API 登入管理
 - ✅ 支援模擬環境和正式環境
 - ✅ 完整的錯誤處理和提示
-- ✅ 100% 單元測試覆蓋
+- ✅ 支援 Context Manager
+- ✅ 100% 單元測試覆蓋（30 個測試案例）
 
 ## 安裝
 
@@ -56,21 +58,51 @@ person_id: "YOUR_PERSON_ID"
 simulation: false  # 設為 true 使用模擬環境
 ```
 
-### 2. 使用配置類別
+### 2. 使用配置與登入
+
+#### 基本用法
 
 ```python
 from src.config import Config
+from src.login import Login
 
 # 載入配置
 config = Config("config.yaml")
 
-# 存取配置參數
-print(f"API Key: {config.api_key}")
-print(f"Person ID: {config.person_id}")
-print(f"Simulation Mode: {config.simulation}")
+# 建立登入物件
+login = Login(config)
 
-# 取得完整配置字典
-config_dict = config.to_dict()
+# 執行登入
+try:
+    login.login()
+    print("✅ 登入成功！")
+    
+    # 這裡可以使用 login.api 進行交易操作
+    # ...
+    
+    # 登出
+    login.logout()
+    print("✅ 已登出")
+    
+except Exception as e:
+    print(f"❌ 錯誤: {e}")
+```
+
+#### 使用 Context Manager（推薦）
+
+```python
+from src.config import Config
+from src.login import Login
+
+# 使用 with 語句自動管理登入/登出
+with Login(Config("config.yaml")) as login:
+    print("✅ 自動登入成功")
+    
+    # 使用 login.api 進行交易
+    # ...
+    
+# 離開 with 區塊時自動登出
+print("✅ 自動登出完成")
 ```
 
 ## 配置說明
@@ -106,7 +138,11 @@ config_dict = config.to_dict()
 
 ```bash
 # 執行所有測試
-pytest
+pytest tests/ -v
+
+# 執行特定測試
+pytest tests/test_config.py -v  # Config 類別測試（13 個）
+pytest tests/test_login.py -v   # Login 類別測試（17 個）
 
 # 執行測試並顯示覆蓋率
 pytest --cov=src tests/
@@ -121,34 +157,66 @@ pytest -v --cov=src --cov-report=html tests/
 sample-trading/
 ├── src/
 │   ├── __init__.py
-│   └── config.py          # 配置管理類別
+│   ├── config.py          # Config 類別（配置管理）
+│   └── login.py           # Login 類別（登入管理）
 ├── tests/
 │   ├── __init__.py
-│   └── test_config.py     # Config 類別單元測試
+│   ├── test_config.py     # Config 單元測試（13 個測試案例）
+│   └── test_login.py      # Login 單元測試（17 個測試案例）
 ├── config.yaml.example    # 配置檔案範本
+├── example.py             # 使用範例
 ├── requirements.txt       # 專案依賴
 ├── README.md             # 專案說明文件
+├── DEVELOPMENT.md        # 開發文檔（含類別圖）
+├── .gitignore            # Git 忽略檔案
 └── LICENSE               # 授權條款
 ```
 
 ## 錯誤處理
 
-Config 類別會在以下情況拋出 `ConfigError` 異常：
+### Config 錯誤
+
+`Config` 類別會在以下情況拋出 `ConfigError` 異常：
 
 - 配置檔案不存在
 - YAML 格式錯誤
 - 缺少必填欄位
 - 必填欄位為空或只有空白字元
 
-範例：
+### Login 錯誤
+
+`Login` 類別會在以下情況拋出 `LoginError` 異常：
+
+- shioaji 套件未安裝
+- 已經登入時重複登入
+- 連線失敗
+- 認證失敗（API 金鑰或密鑰錯誤）
+- 憑證錯誤
+- 連線逾時
+- 尚未登入時呼叫登出
+
+### 錯誤處理範例
 
 ```python
 from src.config import Config, ConfigError
+from src.login import Login, LoginError
 
 try:
+    # 載入配置
     config = Config("config.yaml")
+    
+    # 執行登入
+    login = Login(config)
+    login.login()
+    
+    # 進行交易...
+    
 except ConfigError as e:
-    print(f"配置錯誤: {e}")
+    print(f"⚠️ 配置錯誤: {e}")
+except LoginError as e:
+    print(f"⚠️ 登入錯誤: {e}")
+except Exception as e:
+    print(f"❌ 未預期的錯誤: {e}")
 ```
 
 ## 安全性建議

@@ -6,14 +6,17 @@
 sample-trading/
 ├── src/                    # 原始碼目錄
 │   ├── __init__.py        # 套件初始化
-│   └── config.py          # Config 類別實作
+│   ├── config.py          # Config 類別實作
+│   └── login.py           # Login 類別實作
 ├── tests/                  # 測試目錄
 │   ├── __init__.py        
-│   └── test_config.py     # Config 單元測試（13個測試案例）
+│   ├── test_config.py     # Config 單元測試（13個測試案例）
+│   └── test_login.py      # Login 單元測試（17個測試案例）
 ├── config.yaml.example     # 配置檔案範本
 ├── example.py             # 使用範例
 ├── requirements.txt       # 專案依賴
 ├── README.md             # 專案說明
+├── DEVELOPMENT.md        # 開發文檔
 ├── .gitignore            # Git 忽略檔案
 └── LICENSE               # 授權條款
 ```
@@ -107,6 +110,112 @@ sample-trading/
 **回傳：**
 - 包含關鍵資訊的字串（API key 會被截斷保護隱私）
 
+## Login 類別設計
+
+### 類別圖
+
+```
+┌─────────────────────────────────────────┐
+│            Login                        │
+├─────────────────────────────────────────┤
+│ 實例屬性：                               │
+│ + config: Config                        │
+│ + api: Optional[Shioaji]                │
+│ + is_logged_in: bool                    │
+├─────────────────────────────────────────┤
+│ 方法：                                   │
+│ + __init__(config: Config)              │
+│ + login() -> bool                       │
+│ + logout() -> bool                      │
+│ + __repr__() -> str                     │
+│ + __enter__()                           │
+│ + __exit__(...)                         │
+└─────────────────────────────────────────┘
+          │
+          │ 依賴
+          ▼
+┌─────────────────────────────────────────┐
+│            Config                       │
+└─────────────────────────────────────────┘
+```
+
+### 設計原則
+
+1. **依賴注入**：接收 Config 物件而非直接讀取配置
+2. **狀態管理**：清楚追蹤登入狀態，避免重複登入
+3. **延遲導入**：動態導入 shioaji 模組，支援測試環境
+4. **錯誤分類**：將不同類型的錯誤轉換為有意義的訊息
+5. **Context Manager**：支援 with 語句自動管理登入/登出
+
+### 方法說明
+
+#### `__init__(config: Config)`
+初始化登入物件。
+
+**參數：**
+- `config`: Config 配置物件
+
+**異常：**
+- `TypeError`: 當 config 不是 Config 類型時
+
+#### `login() -> bool`
+執行登入操作，連線到永豐 Shioaji API。
+
+**回傳：**
+- `bool`: 登入成功返回 True
+
+**異常：**
+- `LoginError`: 已經登入時重複呼叫
+- `LoginError`: shioaji 套件未安裝
+- `LoginError`: 連線失敗
+- `LoginError`: 認證失敗（API 金鑰錯誤）
+- `LoginError`: 憑證錯誤
+- `LoginError`: 連線逾時
+- `LoginError`: 其他登入錯誤
+
+#### `logout() -> bool`
+執行登出操作。
+
+**回傳：**
+- `bool`: 登出成功返回 True
+
+**異常：**
+- `LoginError`: 尚未登入時呼叫
+- `LoginError`: 登出失敗
+
+#### `__enter__()` 和 `__exit__(...)`
+支援 context manager 模式，自動管理登入和登出。
+
+**範例：**
+```python
+with Login(config) as login:
+    # 自動登入
+    print("已登入")
+# 自動登出
+```
+
+## 類別關係圖
+
+```
+┌─────────────┐
+│   Config    │  配置管理
+└─────────────┘
+       │
+       │ 1:1
+       │
+       ▼
+┌─────────────┐
+│    Login    │  登入管理
+└─────────────┘
+       │
+       │ 使用
+       │
+       ▼
+┌─────────────┐
+│  Shioaji    │  永豐 API
+└─────────────┘
+```
+
 ## 配置 Schema
 
 ### 必填欄位（REQUIRED_FIELDS）
@@ -128,7 +237,7 @@ sample-trading/
 
 ## 測試覆蓋
 
-### 測試案例列表
+### Config 類別測試（13 個測試案例）
 
 ✅ **正常情境測試（3 個）**
 1. `test_load_valid_config` - 載入有效配置
@@ -149,17 +258,50 @@ sample-trading/
 12. `test_config_with_path_object` - 使用 Path 物件
 13. `test_config_with_string_path` - 使用字串路徑
 
+### Login 類別測試（17 個測試案例）
+
+✅ **初始化測試（2 個）**
+1. `test_init_with_valid_config` - 使用有效 Config 初始化
+2. `test_init_with_invalid_config` - 使用無效 Config 初始化
+
+✅ **登入成功測試（3 個）**
+3. `test_login_success` - 登入成功
+4. `test_login_with_certificate` - 使用憑證登入
+5. `test_login_already_logged_in` - 重複登入（應失敗）
+
+✅ **登入錯誤測試（5 個）**
+6. `test_login_shioaji_not_installed` - shioaji 未安裝
+7. `test_login_connection_error` - 連線失敗
+8. `test_login_authentication_error` - 認證失敗
+9. `test_login_certificate_error` - 憑證錯誤
+10. `test_login_timeout_error` - 連線逾時
+11. `test_login_generic_error` - 一般錯誤
+
+✅ **登出測試（3 個）**
+12. `test_logout_success` - 登出成功
+13. `test_logout_not_logged_in` - 未登入時登出
+14. `test_logout_error` - 登出失敗
+
+✅ **功能測試（4 個）**
+15. `test_repr` - __repr__() 方法
+16. `test_context_manager` - Context manager 正常流程
+17. `test_context_manager_with_exception` - Context manager 異常處理
+
 ### 執行測試
 
 ```bash
 # 執行所有測試
+pytest tests/ -v
+
+# 執行特定測試
 pytest tests/test_config.py -v
+pytest tests/test_login.py -v
 
 # 執行測試並查看覆蓋率
-pytest tests/test_config.py --cov=src --cov-report=term-missing
+pytest tests/ --cov=src --cov-report=term-missing
 
 # 執行測試並生成 HTML 報告
-pytest tests/test_config.py --cov=src --cov-report=html
+pytest tests/ --cov=src --cov-report=html
 ```
 
 ## API 參數來源
