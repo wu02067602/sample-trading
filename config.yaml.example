@@ -1,0 +1,25 @@
+# 永豐 Shioaji API 設定檔範本
+# 請複製此檔案為 config.yaml 並填入您的帳號資訊
+
+# ==================== 必填欄位 ====================
+# API 金鑰（必填）
+api_key: "YOUR_API_KEY"
+
+# API 密鑰（必填）
+secret_key: "YOUR_SECRET_KEY"
+
+# 身分證字號（必填）
+person_id: "YOUR_PERSON_ID"
+
+# ==================== 選填欄位 ====================
+# 憑證檔案路徑（選填，若使用憑證登入則需填寫）
+# ca_path: "/path/to/your/certificate.pfx"
+
+# 憑證密碼（選填，若使用憑證登入則需填寫）
+# ca_passwd: "YOUR_CA_PASSWORD"
+
+# 是否為模擬環境（選填，預設為 false）
+# simulation: false
+
+# 合約下載逾時時間，單位：秒（選填，預設為 0 表示無限等待）
+# contracts_timeout: 0
