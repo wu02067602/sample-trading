@@ -1,0 +1,48 @@
+# 永豐 Shioaji API 配置範本
+# 請複製此檔案為 config.yaml 並填入您的實際資訊
+
+# ==================== 登入方式選擇 ====================
+# 支援兩種登入方式，請擇一使用：
+# 1. api_key 方式 (推薦，version >= 1.0)
+# 2. person_id 方式 (舊版，version < 1.0)
+
+# ==================== 方式1: API Key 登入 (推薦) ====================
+api:
+  # API 金鑰 (必填)
+  api_key: "YOUR_API_KEY"
+  
+  # 密鑰 (必填)
+  secret_key: "YOUR_SECRET_KEY"
+  
+  # 是否從快取中讀取商品檔 (選填，預設: true)
+  fetch_contract: true
+  
+  # 獲取商品檔 timeout，單位: 毫秒 (選填，預設: 0)
+  contracts_timeout: 0
+  
+  # 是否訂閱委託/成交回報 (選填，預設: true)
+  subscribe_trade: true
+  
+  # 登入動作有效執行時間，單位: 毫秒 (選填，預設: 30000)
+  receive_window: 30000
+
+# ==================== 方式2: 帳號密碼登入 (舊版) ====================
+# 如果使用此方式，請註解掉上方的 api 區塊，並取消註解以下內容
+# account:
+#   # 身份證字號 (必填)
+#   person_id: "YOUR_PERSON_ID"
+#   
+#   # 密碼 (必填)
+#   passwd: "YOUR_PASSWORD"
+#   
+#   # 密碼是否已經被 hashed (選填，預設: false)
+#   hashed: false
+#   
+#   # 是否從快取中讀取商品檔 (選填，預設: true)
+#   fetch_contract: true
+#   
+#   # 獲取商品檔 timeout，單位: 毫秒 (選填，預設: 0)
+#   contracts_timeout: 0
+
+# ==================== 其他設定 ====================
+# 可在此添加其他應用程式相關設定
