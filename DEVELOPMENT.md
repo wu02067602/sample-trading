@@ -7,16 +7,20 @@ sample-trading/
 ├── src/                    # 原始碼目錄
 │   ├── __init__.py        # 套件初始化
 │   ├── config.py          # Config 類別實作
-│   └── login.py           # Login 類別實作
+│   ├── login.py           # Login 類別實作
+│   └── controller.py      # Controller 類別實作 ✨
 ├── tests/                  # 測試目錄
 │   ├── __init__.py        
 │   ├── test_config.py     # Config 單元測試（13個測試案例）
-│   └── test_login.py      # Login 單元測試（17個測試案例）
+│   ├── test_login.py      # Login 單元測試（17個測試案例）
+│   └── test_controller.py # Controller 整合測試（23個測試案例）✨
 ├── config.yaml.example     # 配置檔案範本
 ├── example.py             # 使用範例
+├── example_login.py       # Login 使用範例
 ├── requirements.txt       # 專案依賴
 ├── README.md             # 專案說明
 ├── DEVELOPMENT.md        # 開發文檔
+├── PROJECT_SUMMARY.md    # 專案總結
 ├── .gitignore            # Git 忽略檔案
 └── LICENSE               # 授權條款
 ```
@@ -194,6 +198,83 @@ with Login(config) as login:
 # 自動登出
 ```
 
+## Controller 類別設計
+
+### 類別圖
+
+```
+┌─────────────────────────────────────────┐
+│          Controller                     │
+├─────────────────────────────────────────┤
+│ 實例屬性：                               │
+│ + config: Config                        │
+│ + login: Login                          │
+│ + sj: Optional[Shioaji]                 │
+├─────────────────────────────────────────┤
+│ 方法：                                   │
+│ + __init__(config)                      │
+│ + connect() -> bool                     │
+│ + disconnect() -> bool                  │
+│ + is_connected() -> bool                │
+│ + get_status() -> dict                  │
+│ + __repr__() -> str                     │
+│ + __enter__()                           │
+│ + __exit__(...)                         │
+└─────────────────────────────────────────┘
+```
+
+### 設計原則
+
+1. **整合介面**：整合 Config 和 Login，提供高層次 API
+2. **簡化使用**：使用者只需要與 Controller 互動
+3. **狀態管理**：清楚管理連線狀態和 Shioaji 實例
+4. **彈性初始化**：支援多種初始化方式（路徑或 Config 物件）
+5. **Context Manager**：支援自動資源管理
+
+### 方法說明
+
+#### `__init__(config: Union[str, Path, Config])`
+初始化控制器，支援多種輸入類型。
+
+**參數：**
+- `config`: 配置檔案路徑或 Config 物件
+
+**異常：**
+- `TypeError`: 當 config 類型不正確時
+- `ConfigError`: 當配置載入失敗時
+
+#### `connect() -> bool`
+連線到永豐 API，執行登入並儲存 Shioaji 實例到 `self.sj`。
+
+**回傳：**
+- `bool`: 連線成功返回 True
+
+**異常：**
+- `ControllerError`: 已經連線時重複呼叫
+- `LoginError`: 登入失敗
+
+#### `disconnect() -> bool`
+中斷連線，執行登出並清除 Shioaji 實例。
+
+**回傳：**
+- `bool`: 中斷連線成功返回 True
+
+**異常：**
+- `ControllerError`: 尚未連線時呼叫
+- `LoginError`: 登出失敗
+
+#### `is_connected() -> bool`
+檢查是否已連線。
+
+**回傳：**
+- `bool`: 已連線返回 True
+
+#### `get_status() -> dict`
+取得控制器狀態資訊。
+
+**回傳：**
+- `dict`: 包含 connected, person_id, simulation, has_certificate
+
 ## 類別關係圖
 
 ```
@@ -201,7 +282,14 @@ with Login(config) as login:
 │   Config    │  配置管理
 └─────────────┘
        │
-       │ 1:1
+       │ 包含
+       │
+       ▼
+┌─────────────┐
+│ Controller  │  高層次控制介面 ✨
+└─────────────┘
+       │
+       │ 包含
        │
        ▼
 ┌─────────────┐
@@ -287,6 +375,45 @@ with Login(config) as login:
 16. `test_context_manager` - Context manager 正常流程
 17. `test_context_manager_with_exception` - Context manager 異常處理
 
+### Controller 類別測試（23 個測試案例）
+
+✅ **初始化測試（5 個）**
+1. `test_init_with_config_object` - 使用 Config 物件初始化
+2. `test_init_with_config_path_string` - 使用字串路徑初始化
+3. `test_init_with_config_path_object` - 使用 Path 物件初始化
+4. `test_init_with_invalid_type` - 使用無效類型初始化
+5. `test_init_with_invalid_config_file` - 使用不存在的配置檔案
+
+✅ **連線測試（3 個）**
+6. `test_connect_success` - 連線成功
+7. `test_connect_already_connected` - 重複連線（應失敗）
+8. `test_connect_login_failure` - 連線失敗
+
+✅ **中斷連線測試（3 個）**
+9. `test_disconnect_success` - 中斷連線成功
+10. `test_disconnect_not_connected` - 未連線時中斷連線
+11. `test_disconnect_logout_failure` - 登出失敗
+
+✅ **連線狀態測試（3 個）**
+12. `test_is_connected_before_connect` - 連線前的狀態
+13. `test_is_connected_after_connect` - 連線後的狀態
+14. `test_is_connected_after_disconnect` - 中斷連線後的狀態
+
+✅ **狀態資訊測試（3 個）**
+15. `test_get_status_not_connected` - 取得未連線狀態
+16. `test_get_status_connected` - 取得已連線狀態
+17. `test_get_status_with_certificate` - 有憑證的狀態
+
+✅ **功能測試（4 個）**
+18. `test_repr_not_connected` - 未連線的字串表示
+19. `test_repr_connected` - 已連線的字串表示
+20. `test_context_manager` - Context manager 正常流程
+21. `test_context_manager_with_exception` - Context manager 異常處理
+
+✅ **整合測試（2 個）**
+22. `test_full_lifecycle` - 完整的生命週期測試
+23. `test_integration_with_real_config_file` - 與真實配置檔案的整合
+
 ### 執行測試
 
 ```bash
@@ -294,8 +421,9 @@ with Login(config) as login:
 pytest tests/ -v
 
 # 執行特定測試
-pytest tests/test_config.py -v
-pytest tests/test_login.py -v
+pytest tests/test_config.py -v      # Config 類別測試（13 個）
+pytest tests/test_login.py -v       # Login 類別測試（17 個）
+pytest tests/test_controller.py -v  # Controller 類別測試（23 個）✨
 
 # 執行測試並查看覆蓋率
 pytest tests/ --cov=src --cov-report=term-missing
@@ -303,6 +431,12 @@ pytest tests/ --cov=src --cov-report=term-missing
 # 執行測試並生成 HTML 報告
 pytest tests/ --cov=src --cov-report=html
 ```
+
+### 測試統計
+
+- **總測試案例數**：53 個 ✅
+- **測試通過率**：100% ✅
+- **測試覆蓋率**：完整覆蓋所有核心功能 ✅
 
 ## API 參數來源
 

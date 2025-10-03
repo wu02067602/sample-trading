@@ -7,10 +7,11 @@
 - ✅ 簡潔的 YAML 配置檔案管理
 - ✅ 自動驗證必填欄位
 - ✅ 永豐 API 登入管理
+- ✅ 高層次控制器介面（Controller）✨
 - ✅ 支援模擬環境和正式環境
 - ✅ 完整的錯誤處理和提示
 - ✅ 支援 Context Manager
-- ✅ 100% 單元測試覆蓋（30 個測試案例）
+- ✅ 100% 測試覆蓋（53 個測試案例）✨
 
 ## 安裝
 
@@ -58,13 +59,59 @@ person_id: "YOUR_PERSON_ID"
 simulation: false  # 設為 true 使用模擬環境
 ```
 
-### 2. 使用配置與登入
+### 2. 使用 Controller（推薦）
+
+#### 最簡單的方式
+
+```python
+from src import Controller
+
+# 使用 with 語句自動管理連線
+with Controller("config.yaml") as ctrl:
+    print("✅ 自動連線成功")
+    
+    # 使用 ctrl.sj 進行交易
+    # ctrl.sj 就是 Shioaji API 實例
+    # 例如：
+    # contracts = ctrl.sj.Contracts
+    # positions = ctrl.sj.list_positions()
+    
+# 離開 with 區塊時自動中斷連線
+print("✅ 自動中斷連線完成")
+```
+
+#### 手動管理連線
+
+```python
+from src import Controller
+
+# 建立控制器
+controller = Controller("config.yaml")
+
+try:
+    # 連線
+    controller.connect()
+    print(f"✅ 連線成功！狀態：{controller.get_status()}")
+    
+    # 檢查連線狀態
+    if controller.is_connected():
+        # 使用 controller.sj 進行交易
+        pass
+    
+    # 中斷連線
+    controller.disconnect()
+    print("✅ 已中斷連線")
+    
+except Exception as e:
+    print(f"❌ 錯誤: {e}")
+```
+
+### 3. 進階用法（使用 Config 和 Login）
 
 #### 基本用法
 
 ```python
-from src.config import Config
-from src.login import Login
+from src import Config, Login
 
 # 載入配置
 config = Config("config.yaml")
@@ -88,11 +135,10 @@ except Exception as e:
     print(f"❌ 錯誤: {e}")
 ```
 
-#### 使用 Context Manager（推薦）
+#### 使用 Context Manager
 
 ```python
-from src.config import Config
-from src.login import Login
+from src import Config, Login
 
 # 使用 with 語句自動管理登入/登出
 with Login(Config("config.yaml")) as login:
@@ -141,8 +187,9 @@ print("✅ 自動登出完成")
 pytest tests/ -v
 
 # 執行特定測試
-pytest tests/test_config.py -v  # Config 類別測試（13 個）
-pytest tests/test_login.py -v   # Login 類別測試（17 個）
+pytest tests/test_config.py -v      # Config 類別測試（13 個）
+pytest tests/test_login.py -v       # Login 類別測試（17 個）
+pytest tests/test_controller.py -v  # Controller 類別測試（23 個）✨
 
 # 執行測試並顯示覆蓋率
 pytest --cov=src tests/
@@ -158,16 +205,20 @@ sample-trading/
 ├── src/
 │   ├── __init__.py
 │   ├── config.py          # Config 類別（配置管理）
-│   └── login.py           # Login 類別（登入管理）
+│   ├── login.py           # Login 類別（登入管理）
+│   └── controller.py      # Controller 類別（高層次控制）✨
 ├── tests/
 │   ├── __init__.py
-│   ├── test_config.py     # Config 單元測試（13 個測試案例）
-│   └── test_login.py      # Login 單元測試（17 個測試案例）
+│   ├── test_config.py     # Config 單元測試（13 個）
+│   ├── test_login.py      # Login 單元測試（17 個）
+│   └── test_controller.py # Controller 整合測試（23 個）✨
 ├── config.yaml.example    # 配置檔案範本
-├── example.py             # 使用範例
+├── example.py             # Config 使用範例
+├── example_login.py       # Login 使用範例
 ├── requirements.txt       # 專案依賴
 ├── README.md             # 專案說明文件
 ├── DEVELOPMENT.md        # 開發文檔（含類別圖）
+├── PROJECT_SUMMARY.md    # 專案總結
 ├── .gitignore            # Git 忽略檔案
 └── LICENSE               # 授權條款
 ```
@@ -195,11 +246,46 @@ sample-trading/
 - 連線逾時
 - 尚未登入時呼叫登出
 
+### Controller 錯誤
+
+`Controller` 類別會在以下情況拋出 `ControllerError` 異常：
+
+- 已經連線時重複連線
+- 尚未連線時中斷連線
+- 配置類型不正確
+- 連線或中斷連線時發生未預期的錯誤
+
 ### 錯誤處理範例
 
+#### 使用 Controller（推薦）
+
 ```python
-from src.config import Config, ConfigError
-from src.login import Login, LoginError
+from src import Controller, ControllerError, ConfigError, LoginError
+
+try:
+    # 使用 Controller 簡化流程
+    controller = Controller("config.yaml")
+    controller.connect()
+    
+    # 進行交易...
+    # 使用 controller.sj
+    
+    controller.disconnect()
+    
+except ConfigError as e:
+    print(f"⚠️ 配置錯誤: {e}")
+except LoginError as e:
+    print(f"⚠️ 登入錯誤: {e}")
+except ControllerError as e:
+    print(f"⚠️ 控制器錯誤: {e}")
+except Exception as e:
+    print(f"❌ 未預期的錯誤: {e}")
+```
+
+#### 使用 Config 和 Login
+
+```python
+from src import Config, Login, ConfigError, LoginError
 
 try:
     # 載入配置
