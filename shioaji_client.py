@@ -68,6 +68,7 @@ class ShioajiClient(ITradingClient):
         sj: Shioaji API 實例，登入成功後可用於後續交易操作
         is_logged_in: 登入狀態標記
         config: 登入配置資訊
+        contracts: 商品檔物件，包含所有可交易的商品資訊
     
     Examples:
         基本登入範例：
@@ -108,6 +109,7 @@ class ShioajiClient(ITradingClient):
         self.sj: Optional[sj.Shioaji] = None
         self.is_logged_in: bool = False
         self.config: Optional[LoginConfig] = None
+        self.contracts: Optional[Any] = None
         self.logger = logging.getLogger(__name__)
         
     def connect(self, config: LoginConfig) -> bool:
@@ -201,6 +203,10 @@ class ShioajiClient(ITradingClient):
             self.is_logged_in = True
             self.config = config
             
+            # 獲取商品檔（登入後自動下載）
+            self.contracts = self.sj.Contracts
+            self.logger.info("商品檔載入成功")
+            
             return True
             
         except ValueError as e:
@@ -261,6 +267,7 @@ class ShioajiClient(ITradingClient):
             # 重置狀態
             self.is_logged_in = False
             self.sj = None
+            self.contracts = None
             
             self.logger.info("登出成功")
             return result
@@ -341,3 +348,129 @@ class ShioajiClient(ITradingClient):
             >>> print(client.is_connected())  # True
         """
         return self.is_logged_in and self.sj is not None
+    
+    def get_contracts(self) -> Any:
+        """
+        取得商品檔資訊（實作 ITradingClient.get_contracts）
+        
+        商品檔包含所有可交易的商品資訊，包括股票、期貨、選擇權、指數等。
+        登入後會自動下載商品檔，可透過此方法取得。
+        
+        Returns:
+            Any: 商品檔物件，包含以下屬性：
+                - Stocks: 股票商品
+                - Futures: 期貨商品
+                - Options: 選擇權商品
+                - Indexs: 指數商品
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> config = LoginConfig(person_id="A123456789", passwd="password")
+            >>> client.login(config)
+            >>> contracts = client.get_contracts()
+            >>> 
+            >>> # 取得台積電股票
+            >>> tsmc = contracts.Stocks["2330"]
+            >>> print(tsmc.name)  # 台積電
+            >>> 
+            >>> # 取得台指期
+            >>> tx = contracts.Futures.TXF.TXFR1
+            >>> print(tx.name)  # 台指期
+            >>> 
+            >>> # 取得加權指數
+            >>> tse = contracts.Indexs.TSE.TSE001
+            >>> print(tse.name)  # 加權指數
+        """
+        if not self.is_logged_in or self.contracts is None:
+            raise RuntimeError("尚未登入，無法取得商品檔")
+        
+        return self.contracts
+    
+    def search_contracts(self, keyword: str) -> list:
+        """
+        搜尋商品檔
+        
+        根據關鍵字搜尋商品，支援商品代碼和商品名稱搜尋。
+        
+        Args:
+            keyword: 搜尋關鍵字（商品代碼或名稱）
+        
+        Returns:
+            list: 符合條件的商品列表
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當關鍵字為空時
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> config = LoginConfig(person_id="A123456789", passwd="password")
+            >>> client.login(config)
+            >>> 
+            >>> # 搜尋台積電
+            >>> results = client.search_contracts("2330")
+            >>> for contract in results:
+            ...     print(f"{contract.code} - {contract.name}")
+            >>> 
+            >>> # 搜尋包含「台積」的商品
+            >>> results = client.search_contracts("台積")
+            >>> for contract in results:
+            ...     print(f"{contract.code} - {contract.name}")
+        """
+        if not self.is_logged_in or self.sj is None:
+            raise RuntimeError("尚未登入，無法搜尋商品檔")
+        
+        if not keyword or not keyword.strip():
+            raise ValueError("搜尋關鍵字不可為空")
+        
+        try:
+            results = self.sj.Contracts.search(keyword.strip())
+            self.logger.info(f"搜尋商品檔 '{keyword}'，找到 {len(results)} 個結果")
+            return results
+        except Exception as e:
+            self.logger.error(f"搜尋商品檔時發生錯誤: {e}")
+            raise RuntimeError(f"搜尋商品檔失敗: {e}") from e
+    
+    def get_stock(self, code: str) -> Any:
+        """
+        取得特定股票商品
+        
+        Args:
+            code: 股票代碼（如 "2330"）
+        
+        Returns:
+            Any: 股票商品物件
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當股票代碼無效時
+            KeyError: 當找不到指定的股票時
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> config = LoginConfig(person_id="A123456789", passwd="password")
+            >>> client.login(config)
+            >>> 
+            >>> # 取得台積電
+            >>> tsmc = client.get_stock("2330")
+            >>> print(f"{tsmc.code} - {tsmc.name}")
+            >>> print(f"漲停價: {tsmc.limit_up}, 跌停價: {tsmc.limit_down}")
+        """
+        if not self.is_logged_in or self.contracts is None:
+            raise RuntimeError("尚未登入，無法取得股票資訊")
+        
+        if not code or not code.strip():
+            raise ValueError("股票代碼不可為空")
+        
+        try:
+            stock = self.contracts.Stocks[code.strip()]
+            self.logger.info(f"取得股票 {code}: {stock.name}")
+            return stock
+        except KeyError:
+            raise KeyError(f"找不到股票代碼: {code}")
+        except Exception as e:
+            self.logger.error(f"取得股票時發生錯誤: {e}")
+            raise RuntimeError(f"取得股票失敗: {e}") from e

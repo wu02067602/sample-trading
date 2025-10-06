@@ -223,6 +223,95 @@ class TestShioajiClient(unittest.TestCase):
         self.assertIn("尚未登入", str(context.exception))
     
     @patch('shioaji_client.sj.Shioaji')
+    def test_get_contracts(self, mock_shioaji_class):
+        """測試取得商品檔"""
+        # 設定 mock
+        mock_api = MagicMock()
+        mock_api.login.return_value = ['account1']
+        mock_contracts = MagicMock()
+        mock_api.Contracts = mock_contracts
+        mock_shioaji_class.return_value = mock_api
+        
+        # 先登入
+        client = ShioajiClient()
+        config = LoginConfig(
+            person_id="A123456789",
+            passwd="password123"
+        )
+        client.login(config)
+        
+        # 取得商品檔
+        contracts = client.get_contracts()
+        
+        # 驗證結果
+        self.assertEqual(contracts, mock_contracts)
+        self.assertEqual(client.contracts, mock_contracts)
+    
+    @patch('shioaji_client.sj.Shioaji')
+    def test_get_contracts_without_login(self, mock_shioaji_class):
+        """測試未登入時取得商品檔"""
+        client = ShioajiClient()
+        
+        with self.assertRaises(RuntimeError) as context:
+            client.get_contracts()
+        self.assertIn("尚未登入", str(context.exception))
+    
+    @patch('shioaji_client.sj.Shioaji')
+    def test_search_contracts(self, mock_shioaji_class):
+        """測試搜尋商品檔"""
+        # 設定 mock
+        mock_api = MagicMock()
+        mock_api.login.return_value = ['account1']
+        mock_contracts = MagicMock()
+        mock_contracts.search.return_value = ['result1', 'result2']
+        mock_api.Contracts = mock_contracts
+        mock_shioaji_class.return_value = mock_api
+        
+        # 登入
+        client = ShioajiClient()
+        config = LoginConfig(
+            person_id="A123456789",
+            passwd="password123"
+        )
+        client.login(config)
+        
+        # 搜尋商品
+        results = client.search_contracts("2330")
+        
+        # 驗證結果
+        self.assertEqual(len(results), 2)
+        mock_contracts.search.assert_called_once_with("2330")
+    
+    @patch('shioaji_client.sj.Shioaji')
+    def test_get_stock(self, mock_shioaji_class):
+        """測試取得特定股票"""
+        # 設定 mock
+        mock_api = MagicMock()
+        mock_api.login.return_value = ['account1']
+        mock_stock = MagicMock()
+        mock_stock.code = "2330"
+        mock_stock.name = "台積電"
+        mock_contracts = MagicMock()
+        mock_contracts.Stocks = {"2330": mock_stock}
+        mock_api.Contracts = mock_contracts
+        mock_shioaji_class.return_value = mock_api
+        
+        # 登入
+        client = ShioajiClient()
+        config = LoginConfig(
+            person_id="A123456789",
+            passwd="password123"
+        )
+        client.login(config)
+        
+        # 取得股票
+        stock = client.get_stock("2330")
+        
+        # 驗證結果
+        self.assertEqual(stock.code, "2330")
+        self.assertEqual(stock.name, "台積電")
+    
+    @patch('shioaji_client.sj.Shioaji')
     def test_get_accounts(self, mock_shioaji_class):
         """測試取得帳戶資訊"""
         # 設定 mock

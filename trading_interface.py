@@ -85,6 +85,19 @@ class ITradingClient(ABC):
             bool: 已連線返回 True，未連線返回 False
         """
         pass
+    
+    @abstractmethod
+    def get_contracts(self) -> Any:
+        """
+        取得商品檔資訊
+        
+        Returns:
+            Any: 商品檔物件，包含所有可交易的商品資訊
+        
+        Raises:
+            RuntimeError: 當尚未連線時
+        """
+        pass
 
 
 class IConfigValidator(ABC):

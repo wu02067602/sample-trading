@@ -45,6 +45,16 @@ accounts = client.get_accounts()
 print(f"股票帳戶: {accounts['stock_account']}")
 print(f"期貨帳戶: {accounts['futopt_account']}")
 
+# 取得商品檔
+contracts = client.get_contracts()
+tsmc = contracts.Stocks["2330"]
+print(f"台積電: {tsmc.name}, 參考價: {tsmc.reference}")
+
+# 搜尋商品
+results = client.search_contracts("台積")
+for contract in results:
+    print(f"{contract.code} - {contract.name}")
+
 # 登出
 client.logout()
 ```
@@ -86,10 +96,12 @@ client.login(config)
 ├── trading_interface.py       # 抽象介面定義 (ITradingClient, IConfigValidator)
 ├── shioaji_client.py          # Shioaji 客戶端實作
 ├── test_shioaji_client.py     # 單元測試
-├── example_usage.py           # 使用範例
+├── example_usage.py           # 登入使用範例
+├── example_contracts.py       # 商品檔使用範例
 ├── requirements.txt           # 專案依賴
 ├── 類別圖.md                   # Mermaid 類別圖文檔
 ├── REFACTORING_SUMMARY.md     # 重構總結報告
+├── SOLID_REVIEW.md            # SOLID 原則檢查報告
 └── README.md                  # 本文件
 ```
 
@@ -135,6 +147,7 @@ Shioaji 交易客戶端，實作 `ITradingClient` 介面。
 - `sj` (Optional[Shioaji]): Shioaji API 實例
 - `is_logged_in` (bool): 登入狀態標記
 - `config` (Optional[LoginConfig]): 登入配置資訊
+- `contracts` (Optional[Any]): 商品檔物件（登入後自動載入）
 
 **方法**:
 - `connect(config: LoginConfig) -> bool`: 連接到交易系統
@@ -143,6 +156,9 @@ Shioaji 交易客戶端，實作 `ITradingClient` 介面。
 - `logout() -> bool`: 執行登出操作
 - `get_accounts() -> Dict[str, Any]`: 取得帳戶資訊
 - `is_connected() -> bool`: 檢查連線狀態
+- `get_contracts() -> Any`: 取得商品檔資訊
+- `search_contracts(keyword: str) -> list`: 搜尋商品檔
+- `get_stock(code: str) -> Any`: 取得特定股票商品
 
 ### ITradingClient (介面)
 
@@ -168,6 +184,9 @@ python3 test_shioaji_client.py
 - ✅ 登入/登出流程測試
 - ✅ CA 憑證登入測試
 - ✅ 帳戶查詢測試
+- ✅ 商品檔取得測試
+- ✅ 商品檔搜尋測試
+- ✅ 股票查詢測試
 - ✅ Context Manager 測試
 - ✅ 錯誤處理測試
 
