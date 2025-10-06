@@ -485,3 +485,77 @@ class ShioajiConnector:
             raise RuntimeError("Not logged in. Please login first before getting account balance.")
         
         return self.sj.account_balance()
+    
+    def set_order_callback(self, callback: Callable[[Any], None]) -> None:
+        """
+        設定訂單狀態回報的 callback 函數。
+        
+        當下單後訂單狀態發生變更時（如委託中、已成交、已取消等），
+        會自動呼叫此 callback 函數。Callback 函數應該接受一個參數：order_status
+        
+        Args:
+            callback (Callable[[Any], None]): 
+                Callback 函數，接收一個參數：
+                - order_status: 訂單狀態物件，包含訂單編號、狀態、價格、數量等資訊
+        
+        Examples:
+            >>> def my_order_handler(order_status):
+            ...     print(f"訂單編號: {order_status.order.id}")
+            ...     print(f"訂單狀態: {order_status.status}")
+            >>> 
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.set_order_callback(my_order_handler)
+            >>> # 之後下單時，訂單狀態變更會自動觸發 callback
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試設定 callback 時
+            TypeError: 當傳入的不是可呼叫物件時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before setting callback.")
+        
+        if not callable(callback):
+            raise TypeError("Callback must be a callable function")
+        
+        # 使用裝飾器方式註冊訂單狀態 callback
+        @self.sj.on_order_status()
+        def order_callback(order_status: Any) -> None:
+            callback(order_status)
+    
+    def set_deal_callback(self, callback: Callable[[Any], None]) -> None:
+        """
+        設定成交回報的 callback 函數。
+        
+        當訂單成交時（全部成交或部分成交），會自動呼叫此 callback 函數。
+        Callback 函數應該接受一個參數：deal_status
+        
+        Args:
+            callback (Callable[[Any], None]): 
+                Callback 函數，接收一個參數：
+                - deal_status: 成交回報物件，包含成交價格、成交數量、成交時間等資訊
+        
+        Examples:
+            >>> def my_deal_handler(deal_status):
+            ...     print(f"成交價格: {deal_status.price}")
+            ...     print(f"成交數量: {deal_status.quantity}")
+            >>> 
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.set_deal_callback(my_deal_handler)
+            >>> # 之後下單成交時，會自動觸發 callback
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試設定 callback 時
+            TypeError: 當傳入的不是可呼叫物件時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before setting callback.")
+        
+        if not callable(callback):
+            raise TypeError("Callback must be a callable function")
+        
+        # 使用裝飾器方式註冊成交回報 callback
+        @self.sj.on_deal()
+        def deal_callback(deal_status: Any) -> None:
+            callback(deal_status)
