@@ -53,6 +53,11 @@
 - ✅ `clear_report_history()` - 清除回報歷史記錄
 - ✅ `get_report_summary()` - 取得回報摘要統計
 
+#### 8. 帳戶餘額查詢
+- ✅ `get_account_balance()` - 查詢帳戶銀行餘額
+- ✅ `get_settlements()` - 查詢交割資訊
+- ✅ `get_account_summary()` - 取得完整帳戶摘要
+
 ## 實作特色
 
 ### 程式碼風格
@@ -74,9 +79,9 @@
 
 ## 程式碼統計
 
-- **主檔案**: shioaji_trader.py (1260 行)
-- **函數數量**: 39 個
-- **範例程式**: 7 個
+- **主檔案**: shioaji_trader.py (1395 行)
+- **函數數量**: 42 個
+- **範例程式**: 8 個
 - **文件檔案**: 3 個
 
 ## 使用流程
@@ -121,6 +126,9 @@
 | 回報記錄 | `get_deal_reports()` | 取得成交回報 |
 | 回報記錄 | `clear_report_history()` | 清除歷史記錄 |
 | 回報記錄 | `get_report_summary()` | 取得回報摘要 |
+| 餘額查詢 | `get_account_balance()` | 查詢帳戶餘額 |
+| 餘額查詢 | `get_settlements()` | 查詢交割資訊 |
+| 餘額查詢 | `get_account_summary()` | 取得帳戶摘要 |
 
 ## 範例程式
 
@@ -144,7 +152,10 @@
 ### 6. example_order_report.py
 委託回報記錄範例，展示如何記錄和管理委託回報。
 
-### 7. example_complete.py
+### 7. example_account_balance.py
+帳戶餘額查詢範例，展示如何查詢餘額、交割與帳戶摘要。
+
+### 8. example_complete.py
 完整功能示範，整合所有功能的交易機器人範例。
 
 ## 技術亮點

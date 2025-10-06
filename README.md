@@ -17,6 +17,7 @@
 - ✅ 成交回報查詢功能
 - ✅ 持倉與損益查詢功能
 - ✅ 委託回報記錄與管理功能
+- ✅ 帳戶餘額與交割資訊查詢功能
 
 ## 安裝
 
@@ -222,7 +223,26 @@ print(f"成交回報數: {summary['deal_count']}")
 trader.clear_report_history()
 ```
 
-### 10. 登出系統
+### 10. 帳戶餘額查詢
+
+```python
+# 查詢帳戶餘額
+balance = trader.get_account_balance()
+print(f"帳戶餘額: {balance}")
+
+# 查詢交割資訊
+settlements = trader.get_settlements()
+print(f"T日交割: {settlements.get('T', 0)}")
+print(f"T+1日交割: {settlements.get('T+1', 0)}")
+
+# 取得完整帳戶摘要
+summary = trader.get_account_summary()
+print(f"帳戶餘額: {summary['balance']}")
+print(f"持倉數量: {summary['position_count']}")
+print(f"總市值: {summary['total_value']}")
+```
+
+### 11. 登出系統
 
 ```python
 trader.logout()
@@ -243,6 +263,8 @@ trader.logout()
 - [Shioaji 證券下單教學](https://sinotrade.github.io/zh/tutor/order/Stock/)
 - [Shioaji 零股下單教學](https://sinotrade.github.io/zh/tutor/order/IntradayOdd/)
 - [Shioaji 委託回報教學](https://sinotrade.github.io/zh/tutor/order/order_deal_event/stocks/)
+- [Shioaji 帳戶餘額教學](https://sinotrade.github.io/zh/tutor/accounting/account_balance/)
+- [Shioaji 持倉部位教學](https://sinotrade.github.io/zh/tutor/accounting/position/)
 
 ## 範例程式
 
@@ -252,6 +274,7 @@ trader.logout()
 - `example_order.py` - 股票下單範例（整股與零股下單）
 - `example_trade_status.py` - 成交回報查詢範例（委託狀態、持倉、損益查詢）
 - `example_order_report.py` - 委託回報記錄範例（即時記錄與管理委託回報）
+- `example_account_balance.py` - 帳戶餘額查詢範例（餘額、交割、帳戶摘要查詢）
 - `example_complete.py` - 完整功能示範（整合所有功能的交易機器人範例）
 
 ## 授權

@@ -1258,3 +1258,138 @@ class ShioajiTrader:
             summary['last_report_time'] = max(timestamps)
         
         return summary
+    
+    def get_account_balance(self, account=None):
+        """查詢帳戶銀行餘額
+        
+        查詢指定帳戶的銀行餘額資訊，包含可用餘額、帳戶餘額等。
+        
+        Args:
+            account: 帳戶物件，若為 None 則使用預設證券帳戶
+            
+        Returns:
+            Dict: 帳戶餘額資訊
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 查詢帳戶餘額
+            >>> balance = trader.get_account_balance()
+            >>> print(f"可用餘額: {balance}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            if account is None:
+                account = self.sj.stock_account
+            
+            balance = self.sj.account_balance(account)
+            return balance
+            
+        except Exception as e:
+            print(f"查詢帳戶餘額失敗：{str(e)}")
+            return {}
+    
+    def get_settlements(self, account=None):
+        """查詢交割資訊
+        
+        查詢指定帳戶的交割資訊，包含T日、T+1日、T+2日的交割金額。
+        
+        Args:
+            account: 帳戶物件，若為 None 則使用預設證券帳戶
+            
+        Returns:
+            Dict: 交割資訊
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 查詢交割資訊
+            >>> settlements = trader.get_settlements()
+            >>> print(f"T日交割: {settlements.get('T', 0)}")
+            >>> print(f"T+1日交割: {settlements.get('T+1', 0)}")
+            >>> print(f"T+2日交割: {settlements.get('T+2', 0)}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            if account is None:
+                account = self.sj.stock_account
+            
+            settlements = self.sj.settlements(account)
+            return settlements
+            
+        except Exception as e:
+            print(f"查詢交割資訊失敗：{str(e)}")
+            return {}
+    
+    def get_account_summary(self, account=None) -> Dict[str, Any]:
+        """取得帳戶摘要資訊
+        
+        取得帳戶的完整摘要資訊，包含餘額、持倉、損益等。
+        
+        Args:
+            account: 帳戶物件，若為 None 則使用預設證券帳戶
+            
+        Returns:
+            Dict: 包含完整帳戶資訊的字典
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 取得帳戶摘要
+            >>> summary = trader.get_account_summary()
+            >>> print(f"帳戶餘額: {summary['balance']}")
+            >>> print(f"持倉數量: {summary['position_count']}")
+            >>> print(f"總市值: {summary['total_value']}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            if account is None:
+                account = self.sj.stock_account
+            
+            # 取得各項資訊
+            balance = self.get_account_balance(account)
+            positions = self.list_positions(account)
+            pnl = self.list_profit_loss(account)
+            settlements = self.get_settlements(account)
+            
+            # 計算持倉總市值
+            total_value = 0
+            if positions:
+                for pos in positions:
+                    if hasattr(pos, 'last_price') and hasattr(pos, 'quantity'):
+                        total_value += pos.last_price * pos.quantity
+            
+            # 組合摘要資訊
+            summary = {
+                'account': account,
+                'balance': balance,
+                'settlements': settlements,
+                'position_count': len(positions) if positions else 0,
+                'positions': positions,
+                'profit_loss': pnl,
+                'total_value': total_value,
+            }
+            
+            return summary
+            
+        except Exception as e:
+            print(f"取得帳戶摘要失敗：{str(e)}")
+            return {}
