@@ -214,6 +214,51 @@ avg_price = client.order_deal_callback.get_average_deal_price()
 total_qty = client.order_deal_callback.get_total_deal_quantity()
 ```
 
+### 取得委託回報
+
+```python
+# 先設置委託成交回調
+client.set_order_callback()
+
+# ... 下單後 ...
+
+# 取得所有委託記錄
+report = client.get_order_report()
+print(f"總委託數: {report['statistics']['total']}")
+print(f"已成交: {report['statistics']['filled']}")
+print(f"已取消: {report['statistics']['cancelled']}")
+print(f"待送出: {report['statistics']['pending']}")
+
+for order in report['orders']:
+    print(f"委託時間: {order['timestamp']}")
+    print(f"委託狀態: {order.get('status')}")
+    print(f"委託價格: {order.get('price')}")
+    print(f"委託數量: {order.get('quantity')}")
+
+# 取得特定訂單的委託記錄
+order_report = client.get_order_report("ORDER_ID_123")
+if order_report["orders"]:
+    order = order_report["orders"][0]
+    print(f"訂單狀態: {order.get('status')}")
+
+# 取得最新委託
+latest = client.get_latest_order_report()
+if latest["success"] and latest["order"]:
+    print(f"最新委託狀態: {latest['order'].get('status')}")
+
+# 根據狀態查詢委託
+filled_orders = client.get_orders_by_status("Filled")
+print(f"已成交委託: {filled_orders['count']} 筆")
+
+pending_orders = client.get_orders_by_status("PendingSubmit")
+print(f"待送出委託: {pending_orders['count']} 筆")
+
+# 直接透過 callback handler 取得詳細資訊
+all_orders = client.order_deal_callback.get_orders()
+statistics = client.order_deal_callback.get_order_statistics()
+order_by_id = client.order_deal_callback.get_order_by_id("ORDER_123")
+```
+
 ### 啟用憑證（用於下單）
 
 ```python
@@ -294,6 +339,9 @@ client = ShioajiClient(validator=custom_validator)
 - `update_order(order_id: str, price: float, quantity: int) -> Dict[str, Any]`: 修改訂單
 - `get_deal_report(order_id: Optional[str]) -> Dict[str, Any]`: 取得成交回報
 - `get_latest_deal_report() -> Dict[str, Any]`: 取得最新成交回報
+- `get_order_report(order_id: Optional[str]) -> Dict[str, Any]`: 取得委託回報
+- `get_latest_order_report() -> Dict[str, Any]`: 取得最新委託回報
+- `get_orders_by_status(status: str) -> Dict[str, Any]`: 根據狀態取得委託回報
 
 ### OrderConfig
 
@@ -344,6 +392,10 @@ client = ShioajiClient(validator=custom_validator)
 - `get_average_deal_price(order_id: Optional[str]) -> float`: 取得平均成交價格
 - `clear_deals(order_id: Optional[str])`: 清除成交記錄
 - `clear_orders(order_id: Optional[str])`: 清除委託記錄
+- `get_latest_order() -> Optional[Dict]`: 取得最新委託記錄
+- `get_orders_by_status(status: str) -> List[Dict]`: 根據狀態取得委託記錄
+- `get_order_by_id(order_id: str) -> Optional[Dict]`: 根據訂單 ID 取得委託記錄
+- `get_order_statistics() -> Dict[str, Any]`: 取得委託統計資訊
 
 ## 錯誤處理
 

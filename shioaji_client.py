@@ -660,6 +660,163 @@ class ShioajiClient(ITradingClient, IOrderManager):
                 "error": error_msg
             }
     
+    def get_order_report(self, order_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        取得委託回報
+        
+        取得委託回報資訊。可以指定訂單 ID 來取得特定委託記錄，
+        或者取得所有委託記錄。
+        
+        Args:
+            order_id (Optional[str]): 訂單 ID，如果為 None 則返回所有委託記錄
+        
+        Returns:
+            Dict[str, Any]: 委託回報字典，包含以下鍵值：
+                - success (bool): 取得是否成功
+                - orders (List[Dict]): 委託記錄列表
+                - statistics (Dict): 委託統計資訊
+                - message (str): 結果訊息
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和設置回調 ...
+            >>> # 取得所有委託記錄
+            >>> report = client.get_order_report()
+            >>> print(f"總委託數量: {report['statistics']['total']}")
+            >>> print(f"已成交: {report['statistics']['filled']}")
+            >>> 
+            >>> # 取得特定訂單的委託記錄
+            >>> order = client.get_order_report("ORDER_123")
+            >>> if order["orders"]:
+            ...     print(f"訂單狀態: {order['orders'][0].get('status')}")
+        """
+        try:
+            if order_id:
+                order = self.order_deal_callback.get_order_by_id(order_id)
+                orders = [order] if order else []
+                statistics = {"total": len(orders)}
+            else:
+                orders = self.order_deal_callback.get_orders()
+                statistics = self.order_deal_callback.get_order_statistics()
+            
+            return {
+                "success": True,
+                "orders": orders,
+                "statistics": statistics,
+                "message": f"成功取得 {len(orders)} 筆委託記錄"
+            }
+            
+        except Exception as e:
+            error_msg = f"取得委託回報過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "orders": [],
+                "statistics": {},
+                "message": "取得委託回報失敗",
+                "error": error_msg
+            }
+    
+    def get_latest_order_report(self) -> Dict[str, Any]:
+        """
+        取得最新委託回報
+        
+        取得最新一筆委託記錄。
+        
+        Returns:
+            Dict[str, Any]: 最新委託回報字典，包含以下鍵值：
+                - success (bool): 取得是否成功
+                - order (Optional[Dict]): 最新委託記錄
+                - message (str): 結果訊息
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和設置回調 ...
+            >>> report = client.get_latest_order_report()
+            >>> if report["success"] and report["order"]:
+            ...     order = report["order"]
+            ...     print(f"最新委託狀態: {order.get('status')}")
+            ...     print(f"委託價格: {order.get('price')}")
+            ...     print(f"委託數量: {order.get('quantity')}")
+        """
+        try:
+            latest_order = self.order_deal_callback.get_latest_order()
+            
+            if latest_order:
+                return {
+                    "success": True,
+                    "order": latest_order,
+                    "message": "成功取得最新委託記錄"
+                }
+            else:
+                return {
+                    "success": True,
+                    "order": None,
+                    "message": "目前沒有委託記錄"
+                }
+            
+        except Exception as e:
+            error_msg = f"取得最新委託回報過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "order": None,
+                "message": "取得最新委託回報失敗",
+                "error": error_msg
+            }
+    
+    def get_orders_by_status(self, status: str) -> Dict[str, Any]:
+        """
+        根據狀態取得委託回報
+        
+        取得指定狀態的所有委託記錄。
+        
+        Args:
+            status (str): 委託狀態，常見狀態包括：
+                - 'PendingSubmit': 待送出
+                - 'PreSubmitted': 預約單
+                - 'Submitted': 已送出
+                - 'Filled': 完全成交
+                - 'PartFilled': 部分成交
+                - 'Cancelled': 已取消
+        
+        Returns:
+            Dict[str, Any]: 委託回報字典，包含以下鍵值：
+                - success (bool): 取得是否成功
+                - orders (List[Dict]): 符合狀態的委託記錄列表
+                - count (int): 符合條件的委託數量
+                - message (str): 結果訊息
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和設置回調 ...
+            >>> # 取得所有已成交的委託
+            >>> filled_report = client.get_orders_by_status("Filled")
+            >>> print(f"已成交委託: {filled_report['count']} 筆")
+            >>> 
+            >>> # 取得所有待送出的委託
+            >>> pending_report = client.get_orders_by_status("PendingSubmit")
+            >>> for order in pending_report['orders']:
+            ...     print(f"委託 ID: {order.get('order_id')}")
+        """
+        try:
+            orders = self.order_deal_callback.get_orders_by_status(status)
+            
+            return {
+                "success": True,
+                "orders": orders,
+                "count": len(orders),
+                "message": f"成功取得 {len(orders)} 筆狀態為 '{status}' 的委託記錄"
+            }
+            
+        except Exception as e:
+            error_msg = f"取得委託回報過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "orders": [],
+                "count": 0,
+                "message": "取得委託回報失敗",
+                "error": error_msg
+            }
+    
     def place_order(self, order_config: OrderConfig) -> Dict[str, Any]:
         """
         下一般股票訂單

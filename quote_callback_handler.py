@@ -496,3 +496,106 @@ class OrderDealCallbackHandler:
                 order for order in self.orders
                 if order.get('order_id') != order_id and order.get('ord_id') != order_id
             ]
+    
+    def get_latest_order(self) -> Optional[Dict[str, Any]]:
+        """
+        取得最新的委託記錄
+        
+        Returns:
+            Optional[Dict[str, Any]]: 最新委託記錄，如果沒有則返回 None
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收委託後 ...
+            >>> latest = handler.get_latest_order()
+            >>> if latest:
+            ...     print(f"最新委託狀態: {latest.get('status')}")
+        """
+        if len(self.orders) > 0:
+            return self.orders[-1]
+        return None
+    
+    def get_orders_by_status(self, status: str) -> List[Dict[str, Any]]:
+        """
+        根據狀態取得委託記錄
+        
+        Args:
+            status (str): 委託狀態，如 'PendingSubmit', 'PreSubmitted', 'Submitted', 
+                         'Filled', 'Cancelled' 等
+        
+        Returns:
+            List[Dict[str, Any]]: 符合狀態的委託記錄列表
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收委託後 ...
+            >>> filled_orders = handler.get_orders_by_status("Filled")
+            >>> print(f"已成交委託: {len(filled_orders)} 筆")
+            >>> pending_orders = handler.get_orders_by_status("PendingSubmit")
+            >>> print(f"待送出委託: {len(pending_orders)} 筆")
+        """
+        return [
+            order for order in self.orders
+            if order.get('status') == status or order.get('order_status') == status
+        ]
+    
+    def get_order_by_id(self, order_id: str) -> Optional[Dict[str, Any]]:
+        """
+        根據訂單 ID 取得委託記錄
+        
+        Args:
+            order_id (str): 訂單 ID
+        
+        Returns:
+            Optional[Dict[str, Any]]: 委託記錄，如果找不到則返回 None
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收委託後 ...
+            >>> order = handler.get_order_by_id("ORDER_123")
+            >>> if order:
+            ...     print(f"訂單狀態: {order.get('status')}")
+        """
+        for order in self.orders:
+            if order.get('order_id') == order_id or order.get('ord_id') == order_id:
+                return order
+        return None
+    
+    def get_order_statistics(self) -> Dict[str, Any]:
+        """
+        取得委託統計資訊
+        
+        Returns:
+            Dict[str, Any]: 委託統計字典，包含各種狀態的委託數量
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收委託後 ...
+            >>> stats = handler.get_order_statistics()
+            >>> print(f"總委託數: {stats['total']}")
+            >>> print(f"已成交: {stats['filled']}")
+            >>> print(f"已取消: {stats['cancelled']}")
+        """
+        stats = {
+            "total": len(self.orders),
+            "filled": 0,
+            "cancelled": 0,
+            "pending": 0,
+            "submitted": 0,
+            "other": 0
+        }
+        
+        for order in self.orders:
+            status = order.get('status') or order.get('order_status') or ''
+            if 'Filled' in status or 'filled' in status.lower():
+                stats['filled'] += 1
+            elif 'Cancel' in status or 'cancel' in status.lower():
+                stats['cancelled'] += 1
+            elif 'Pending' in status or 'pending' in status.lower():
+                stats['pending'] += 1
+            elif 'Submit' in status or 'submit' in status.lower():
+                stats['submitted'] += 1
+            else:
+                stats['other'] += 1
+        
+        return stats
