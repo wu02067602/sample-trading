@@ -1,0 +1,8 @@
+# 量化交易系統依賴套件
+# Trading System Dependencies
+
+# 永豐金證券 Shioaji API
+shioaji>=1.1.0
+
+# 日誌和工具
+typing-extensions>=4.5.0
