@@ -1105,14 +1105,20 @@ class ShioajiConnector:
             self.logger.error(f"修改訂單失敗: {str(e)}")
             return None
     
-    def list_positions(self) -> List[Any]:
+    def get_account_balance(self) -> Optional[Any]:
         """
-        查詢持股明細
+        取得帳戶餘額資訊
         
-        取得目前的持股明細。
+        查詢證券帳戶的餘額資訊，包含可用餘額、帳戶總額、已實現損益等。
         
         Returns:
-            List[Any]: 持股明細列表
+            Optional[Any]: 帳戶餘額物件，包含以下屬性：
+                - account_balance: 帳戶餘額
+                - available_balance: 可用餘額
+                - T_money: T日資金
+                - T1_money: T+1日資金
+                - T2_money: T+2日資金
+                如果查詢失敗則返回 None
             
         Raises:
             ConnectionError: 當尚未登入時拋出
@@ -1120,16 +1126,125 @@ class ShioajiConnector:
         Examples:
             >>> connector = ShioajiConnector()
             >>> connector.login(person_id="A123456789", passwd="password")
-            >>> positions = connector.list_positions()
+            >>> balance = connector.get_account_balance()
             >>> 
+            >>> if balance:
+            >>>     print(f"可用餘額: {balance.available_balance}")
+            >>>     print(f"帳戶總額: {balance.account_balance}")
+            
+        Note:
+            - 需要先登入才能查詢
+            - 返回的餘額為即時資料
+            - T日/T+1日/T+2日資金代表不同交割日的可用金額
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        try:
+            balance = self.sj.account_balance()
+            self.logger.info("查詢帳戶餘額成功")
+            return balance
+        except Exception as e:
+            self.logger.error(f"查詢帳戶餘額失敗: {str(e)}")
+            return None
+    
+    def get_account_balance_summary(self) -> Dict[str, Any]:
+        """
+        取得帳戶餘額摘要
+        
+        以字典格式返回帳戶餘額的關鍵資訊，便於顯示和處理。
+        
+        Returns:
+            Dict[str, Any]: 帳戶餘額摘要字典
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> summary = connector.get_account_balance_summary()
+            >>> 
+            >>> print(f"可用餘額: {summary['available_balance']:,.0f} 元")
+            >>> print(f"帳戶總額: {summary['account_balance']:,.0f} 元")
+            >>> print(f"T日資金: {summary['T_money']:,.0f} 元")
+            
+        Note:
+            - 所有金額單位為新台幣
+            - 如果查詢失敗，各欄位值為 0
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        balance = self.get_account_balance()
+        
+        if balance is None:
+            return {
+                'account_balance': 0,
+                'available_balance': 0,
+                'T_money': 0,
+                'T1_money': 0,
+                'T2_money': 0,
+                'query_time': datetime.now()
+            }
+        
+        try:
+            return {
+                'account_balance': getattr(balance, 'account_balance', 0),
+                'available_balance': getattr(balance, 'available_balance', 0),
+                'T_money': getattr(balance, 'T_money', 0),
+                'T1_money': getattr(balance, 'T1_money', 0),
+                'T2_money': getattr(balance, 'T2_money', 0),
+                'query_time': datetime.now()
+            }
+        except Exception as e:
+            self.logger.error(f"解析帳戶餘額失敗: {str(e)}")
+            return {
+                'account_balance': 0,
+                'available_balance': 0,
+                'T_money': 0,
+                'T1_money': 0,
+                'T2_money': 0,
+                'query_time': datetime.now()
+            }
+    
+    def list_positions(self, with_detail: bool = False) -> List[Any]:
+        """
+        查詢持股明細
+        
+        取得目前的持股明細，可選擇是否包含詳細資訊。
+        
+        Args:
+            with_detail (bool, optional): 是否返回詳細資訊字典。預設為 False。
+        
+        Returns:
+            List[Any]: 持股明細列表。如果 with_detail=True，返回字典列表
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> 
+            >>> # 基本查詢
+            >>> positions = connector.list_positions()
             >>> for pos in positions:
-            >>>     print(f"商品: {pos.code}")
-            >>>     print(f"數量: {pos.quantity}")
-            >>>     print(f"成本: {pos.price}")
+            >>>     print(f"商品: {pos.code}, 數量: {pos.quantity}")
+            >>> 
+            >>> # 詳細查詢
+            >>> positions = connector.list_positions(with_detail=True)
+            >>> for pos in positions:
+            >>>     print(f"商品: {pos['code']}")
+            >>>     print(f"數量: {pos['quantity']}")
+            >>>     print(f"成本價: {pos['price']}")
+            >>>     print(f"現價: {pos['last_price']}")
+            >>>     print(f"損益: {pos['pnl']}")
             
         Note:
             - 需要先登入才能查詢
             - 返回的是即時持股資料
+            - with_detail=True 時會將持股資訊轉換為易讀的字典格式
         """
         if not self.is_connected:
             raise ConnectionError("尚未登入，請先執行 login()")
@@ -1137,10 +1252,104 @@ class ShioajiConnector:
         try:
             positions = self.sj.list_positions()
             self.logger.info(f"查詢持股明細成功，共 {len(positions)} 筆")
-            return positions
+            
+            if not with_detail:
+                return positions
+            
+            # 轉換為詳細資訊字典
+            detailed_positions = []
+            for pos in positions:
+                try:
+                    detail = {
+                        'code': getattr(pos, 'code', ''),
+                        'quantity': getattr(pos, 'quantity', 0),
+                        'price': getattr(pos, 'price', 0),
+                        'last_price': getattr(pos, 'last_price', 0),
+                        'pnl': getattr(pos, 'pnl', 0),
+                        'yd_quantity': getattr(pos, 'yd_quantity', 0),
+                        'cond': getattr(pos, 'cond', ''),
+                        'direction': getattr(pos, 'direction', '')
+                    }
+                    detailed_positions.append(detail)
+                except Exception as e:
+                    self.logger.warning(f"解析持股資訊失敗: {str(e)}")
+                    continue
+            
+            return detailed_positions
+            
         except Exception as e:
             self.logger.error(f"查詢持股明細失敗: {str(e)}")
             return []
+    
+    def get_positions_summary(self) -> Dict[str, Any]:
+        """
+        取得持股摘要統計
+        
+        統計持股的總體資訊，包括持股數量、總市值、總損益等。
+        
+        Returns:
+            Dict[str, Any]: 持股摘要字典
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> summary = connector.get_positions_summary()
+            >>> 
+            >>> print(f"持股檔數: {summary['total_stocks']} 檔")
+            >>> print(f"總市值: {summary['total_value']:,.0f} 元")
+            >>> print(f"總損益: {summary['total_pnl']:,.0f} 元")
+            >>> print(f"報酬率: {summary['return_rate']:.2f}%")
+            
+        Note:
+            - 總市值 = Σ(現價 × 數量)
+            - 總損益 = Σ(現價 - 成本價) × 數量
+            - 報酬率 = 總損益 / 總成本 × 100%
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        positions = self.list_positions(with_detail=True)
+        
+        if not positions:
+            return {
+                'total_stocks': 0,
+                'total_quantity': 0,
+                'total_cost': 0,
+                'total_value': 0,
+                'total_pnl': 0,
+                'return_rate': 0,
+                'query_time': datetime.now()
+            }
+        
+        total_quantity = 0
+        total_cost = 0
+        total_value = 0
+        total_pnl = 0
+        
+        for pos in positions:
+            quantity = pos.get('quantity', 0)
+            price = pos.get('price', 0)
+            last_price = pos.get('last_price', 0)
+            
+            total_quantity += quantity
+            total_cost += price * quantity
+            total_value += last_price * quantity
+            total_pnl += (last_price - price) * quantity
+        
+        return_rate = (total_pnl / total_cost * 100) if total_cost > 0 else 0
+        
+        return {
+            'total_stocks': len(positions),
+            'total_quantity': total_quantity,
+            'total_cost': total_cost,
+            'total_value': total_value,
+            'total_pnl': total_pnl,
+            'return_rate': return_rate,
+            'query_time': datetime.now()
+        }
     
     def list_trades(self) -> List[Any]:
         """

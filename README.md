@@ -15,7 +15,8 @@
 - ✅ **Callback 事件處理機制（v3.0）**
 - ✅ **證券下單與交易功能（v4.0）**
 - ✅ **訂單管理與持股查詢（v4.0）**
-- ✅ **委託回報與成交回報監控（v4.1 新增）**
+- ✅ **委託回報與成交回報監控（v4.1）**
+- ✅ **帳戶餘額查詢與持股分析（v4.2 新增）**
 - ✅ 完整的錯誤處理與日誌記錄
 - ✅ 符合 SOLID 原則的物件導向設計
 
@@ -29,7 +30,8 @@ sample-trading/
 ├── quote_streaming_example.py # 即時報價訂閱範例（v3.0）
 ├── order_trading_example.py   # 證券下單交易範例（v4.0）
 ├── deal_event_example.py      # 成交回報監控範例（v4.1）
-├── order_event_example.py     # 委託回報查詢範例（v4.1 新增）
+├── order_event_example.py     # 委託回報查詢範例（v4.1）
+├── account_info_example.py    # 帳戶資訊查詢範例（v4.2 新增）
 ├── requirements.txt           # 專案依賴套件
 ├── 類別圖.md                 # 系統架構與類別圖文件
 ├── README.md                 # 專案說明文件
@@ -134,9 +136,15 @@ with ShioajiConnector(simulation=True) as connector:
 - `get_order_updates_summary()` - 統計各狀態的委託數量
 - `clear_order_update_callbacks()` - 清除委託回報回調
 
-**成交回報（Deal Event）（v4.1 新增）：**
+**成交回報（Deal Event）（v4.1）：**
 - `set_deal_callback(callback)` - 設定成交回報回調函數
 - `get_deals_history()` - 取得成交歷史記錄
+
+**帳戶資訊查詢（v4.2 新增）：**
+- `get_account_balance()` - 取得帳戶餘額資訊
+- `get_account_balance_summary()` - 取得帳戶餘額摘要
+- `list_positions(with_detail)` - 查詢持股明細（增強版）
+- `get_positions_summary()` - 取得持股摘要統計
 
 **主要屬性：**
 
@@ -618,7 +626,23 @@ python example_usage.py
 4. 便利函數使用
 5. 錯誤處理
 
-### 委託回報查詢範例（v4.1 新增）
+### 帳戶資訊查詢範例（v4.2 新增）
+
+```bash
+python account_info_example.py
+```
+
+範例包含：
+1. 查詢帳戶餘額
+2. 查詢帳戶餘額摘要
+3. 查詢持股明細
+4. 查詢持股明細（詳細版）
+5. 查詢持股摘要統計
+6. 帳戶總覽
+7. 持股分析
+8. 檢查購買力
+
+### 委託回報查詢範例（v4.1）
 
 ```bash
 python order_event_example.py
@@ -740,7 +764,88 @@ connector = ShioajiConnector(simulation=True)
 - Python 3.8+
 - Shioaji 1.1.0+
 
+## 🏦 帳戶資訊查詢（v4.2 新增）
+
+### 查詢帳戶餘額
+
+```python
+from shioaji_connector import ShioajiConnector
+
+connector = ShioajiConnector(simulation=True)
+connector.login(
+    person_id="YOUR_PERSON_ID",
+    passwd="YOUR_PASSWORD"
+)
+
+# 查詢帳戶餘額
+balance = connector.get_account_balance()
+print(f"可用餘額: {balance.available_balance:,.0f} 元")
+print(f"帳戶總額: {balance.account_balance:,.0f} 元")
+print(f"T日資金: {balance.T_money:,.0f} 元")
+
+# 查詢餘額摘要（字典格式）
+summary = connector.get_account_balance_summary()
+print(f"可用餘額: {summary['available_balance']:,.0f} 元")
+print(f"T+1日資金: {summary['T1_money']:,.0f} 元")
+```
+
+### 查詢持股資訊
+
+```python
+# 基本持股查詢
+positions = connector.list_positions()
+for pos in positions:
+    print(f"{pos.code}: {pos.quantity} 股")
+
+# 詳細持股查詢（字典格式）
+positions = connector.list_positions(with_detail=True)
+for pos in positions:
+    return_rate = (pos['last_price'] - pos['price']) / pos['price'] * 100
+    print(f"{pos['code']}: {return_rate:+.2f}%")
+
+# 持股摘要統計
+summary = connector.get_positions_summary()
+print(f"持股檔數: {summary['total_stocks']} 檔")
+print(f"總市值: {summary['total_value']:,.0f} 元")
+print(f"總損益: {summary['total_pnl']:,.0f} 元")
+print(f"報酬率: {summary['return_rate']:+.2f}%")
+```
+
+### 帳戶總覽
+
+```python
+# 綜合查詢
+balance = connector.get_account_balance_summary()
+positions = connector.get_positions_summary()
+
+print("=== 帳戶總覽 ===")
+print(f"現金: {balance['available_balance']:,.0f} 元")
+print(f"股票: {positions['total_value']:,.0f} 元")
+print(f"總資產: {balance['available_balance'] + positions['total_value']:,.0f} 元")
+print(f"持股損益: {positions['total_pnl']:,.0f} 元 ({positions['return_rate']:+.2f}%)")
+```
+
+---
+
 ## 📝 版本記錄
+
+### v4.2.0 (2025-10-06) - 帳戶資訊查詢與持股分析
+
+**帳戶餘額查詢功能：**
+- ✅ 實作 `get_account_balance()` 查詢帳戶餘額
+- ✅ 實作 `get_account_balance_summary()` 取得餘額摘要
+- ✅ 支援查詢 T/T+1/T+2 日可用資金
+
+**持股查詢與分析功能：**
+- ✅ 增強 `list_positions(with_detail)` 支援詳細資訊
+- ✅ 實作 `get_positions_summary()` 持股統計
+- ✅ 自動計算總市值、總損益、報酬率
+
+**其他改進：**
+- ✅ 提供原始物件和字典兩種格式
+- ✅ 完整的錯誤處理與預設值
+- ✅ 新增 `account_info_example.py` 範例程式
+- ✅ 更新類別圖和文檔
 
 ### v4.1.0 (2025-10-06) - 委託回報與成交回報監控
 
@@ -849,5 +954,5 @@ connector = ShioajiConnector(simulation=True)
 ---
 
 **建立日期：** 2025-10-06  
-**版本：** 4.1.0 (委託回報與成交回報監控)  
+**版本：** 4.2.0 (帳戶資訊查詢與持股分析)  
 **作者：** Trading System Team
