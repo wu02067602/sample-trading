@@ -1,0 +1,5 @@
+# Sample YAML configuration for testing
+api_key: "test_api_key_123"
+secret_key: "test_secret_key_456"
+person_id: "A123456789"
+ca_password: "test_password"
