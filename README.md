@@ -11,6 +11,8 @@
 - ✅ 類別屬性 `contracts` 供查詢商品檔
 - ✅ 帳戶管理功能
 - ✅ 商品檔查詢與搜尋功能
+- ✅ 即時報價訂閱功能
+- ✅ Callback 監控機制（報價與委託回報）
 
 ## 安裝
 
@@ -117,7 +119,37 @@ for contract in results:
     print(f"{contract.code}: {contract.name}")
 ```
 
-### 5. 登出系統
+### 5. 訂閱即時報價
+
+```python
+# 定義 callback 函數
+def quote_callback(exchange, tick):
+    print(f"{tick['code']}: 價={tick['close']}, 量={tick['volume']}")
+
+# 設定 callback
+trader.set_quote_callback(quote_callback)
+
+# 訂閱台積電報價
+tsmc = trader.get_stock("2330")
+trader.subscribe_quote(tsmc)
+
+# 取消訂閱
+trader.unsubscribe_quote(tsmc)
+```
+
+### 6. 設定委託回報 Callback
+
+```python
+# 定義委託回報 callback
+def order_callback(stat, msg):
+    print(f"狀態: {stat}")
+    print(f"訊息: {msg}")
+
+# 設定 callback
+trader.set_order_callback(order_callback)
+```
+
+### 7. 登出系統
 
 ```python
 trader.logout()
@@ -133,11 +165,15 @@ trader.logout()
 - [Shioaji 官方文件](https://sinotrade.github.io/)
 - [Shioaji 登入教學](https://sinotrade.github.io/zh/tutor/login/)
 - [Shioaji 商品檔教學](https://sinotrade.github.io/zh/tutor/contract/)
+- [Shioaji 報價訂閱教學](https://sinotrade.github.io/zh/tutor/market_data/streaming/stocks/)
+- [Shioaji Callback 教學](https://sinotrade.github.io/zh/tutor/callback/orderdeal_event/)
 
 ## 範例程式
 
 - `example_usage.py` - 基本使用範例（含登入、帳戶管理、商品查詢）
 - `example_contracts.py` - 商品檔查詢範例（詳細示範各種查詢方法）
+- `example_quote_callback.py` - 報價訂閱與 Callback 監控範例
+- `example_complete.py` - 完整功能示範（整合所有功能的交易機器人範例）
 
 ## 授權
 

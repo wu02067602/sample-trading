@@ -4,7 +4,8 @@
 """
 
 import shioaji as sj
-from typing import Optional, List
+from typing import Optional, List, Callable, Dict, Any
+import time
 
 
 class ShioajiTrader:
@@ -15,6 +16,9 @@ class ShioajiTrader:
     Attributes:
         sj: Shioaji API 實例，登入成功後可用於後續交易操作
         contracts: 商品檔物件，提供證券、期貨、選擇權、指數等商品資訊
+        _subscribed_contracts: 已訂閱的商品清單
+        _quote_callback: 報價 callback 函數
+        _order_callback: 委託回報 callback 函數
         
     Examples:
         使用 API Key 登入：
@@ -37,6 +41,9 @@ class ShioajiTrader:
         建立 Shioaji API 物件並儲存於 self.sj 屬性中。
         """
         self.sj: Optional[sj.Shioaji] = sj.Shioaji()
+        self._subscribed_contracts: List = []  # 記錄已訂閱的商品
+        self._quote_callback: Optional[Callable] = None  # 報價 callback
+        self._order_callback: Optional[Callable] = None  # 委託 callback
     
     def login(
         self,
@@ -395,3 +402,177 @@ class ShioajiTrader:
         except Exception as e:
             print(f"搜尋商品失敗：{str(e)}")
             return []
+    
+    def subscribe_quote(self, contract, quote_type: str = "tick") -> bool:
+        """訂閱商品報價
+        
+        訂閱指定商品的即時報價資訊。報價資料將透過 callback 函數接收。
+        需要先使用 set_quote_callback() 設定 callback 函數。
+        
+        Args:
+            contract: 商品物件，可從 contracts 取得
+            quote_type: 報價類型，可選 "tick" (逐筆) 或 "bidask" (五檔)，
+                       預設為 "tick"
+            
+        Returns:
+            bool: 訂閱是否成功
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當尚未設定 callback 函數時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 設定 callback
+            >>> def my_callback(exchange, tick):
+            ...     print(f"{tick.code}: 成交價={tick.close}, 量={tick.volume}")
+            >>> 
+            >>> trader.set_quote_callback(my_callback)
+            >>> 
+            >>> # 訂閱台積電報價
+            >>> tsmc = trader.get_stock("2330")
+            >>> trader.subscribe_quote(tsmc)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        if not self._quote_callback:
+            raise ValueError("請先使用 set_quote_callback() 設定 callback 函數")
+        
+        try:
+            # 訂閱報價
+            self.sj.quote.subscribe(
+                contract,
+                quote_type=quote_type,
+                version="v1"
+            )
+            
+            # 記錄已訂閱的商品
+            if contract not in self._subscribed_contracts:
+                self._subscribed_contracts.append(contract)
+            
+            print(f"訂閱成功：{contract.code} - {contract.name}")
+            return True
+            
+        except Exception as e:
+            print(f"訂閱失敗：{str(e)}")
+            return False
+    
+    def unsubscribe_quote(self, contract) -> bool:
+        """取消訂閱商品報價
+        
+        取消訂閱指定商品的報價。
+        
+        Args:
+            contract: 商品物件
+            
+        Returns:
+            bool: 取消訂閱是否成功
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader.unsubscribe_quote(tsmc)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            self.sj.quote.unsubscribe(
+                contract,
+                quote_type="tick",
+                version="v1"
+            )
+            
+            if contract in self._subscribed_contracts:
+                self._subscribed_contracts.remove(contract)
+            
+            print(f"取消訂閱成功：{contract.code} - {contract.name}")
+            return True
+            
+        except Exception as e:
+            print(f"取消訂閱失敗：{str(e)}")
+            return False
+    
+    def set_quote_callback(self, callback: Callable) -> None:
+        """設定報價 callback 函數
+        
+        設定用於接收報價資料的 callback 函數。
+        callback 函數會接收兩個參數：(exchange, tick)。
+        
+        Args:
+            callback: callback 函數，簽名為 callback(exchange, tick)
+                     exchange: 交易所代碼
+                     tick: 報價資料物件
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> def quote_callback(exchange, tick):
+            ...     print(f"{tick.code}: 價={tick.close}, 量={tick.volume}")
+            >>> 
+            >>> trader.set_quote_callback(quote_callback)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        self._quote_callback = callback
+        
+        # 註冊 callback 到 Shioaji
+        @self.sj.on_quote_stk_v1
+        def inner_callback(exchange: str, tick: Dict[str, Any]):
+            if self._quote_callback:
+                self._quote_callback(exchange, tick)
+        
+        print("報價 callback 設定成功")
+    
+    def set_order_callback(self, callback: Callable) -> None:
+        """設定委託回報 callback 函數
+        
+        設定用於接收委託回報與成交回報的 callback 函數。
+        callback 函數會接收兩個參數：(stat, msg)。
+        
+        Args:
+            callback: callback 函數，簽名為 callback(stat, msg)
+                     stat: 委託狀態
+                     msg: 委託或成交訊息
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> def order_callback(stat, msg):
+            ...     print(f"狀態: {stat}")
+            ...     print(f"訊息: {msg}")
+            >>> 
+            >>> trader.set_order_callback(order_callback)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        self._order_callback = callback
+        
+        # 註冊 callback 到 Shioaji
+        @self.sj.on_order_callback
+        def inner_callback(stat, msg):
+            if self._order_callback:
+                self._order_callback(stat, msg)
+        
+        print("委託回報 callback 設定成功")
+    
+    def get_subscribed_contracts(self) -> List:
+        """取得已訂閱的商品清單
+        
+        Returns:
+            List: 已訂閱的商品清單
+            
+        Examples:
+            >>> contracts = trader.get_subscribed_contracts()
+            >>> for contract in contracts:
+            ...     print(f"{contract.code}: {contract.name}")
+        """
+        return self._subscribed_contracts.copy()
