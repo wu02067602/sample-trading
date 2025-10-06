@@ -1,5 +1,6 @@
 # Configuration files with sensitive data
 config.yaml
+!yaml_sample.yaml
 
 # Python
 __pycache__/
