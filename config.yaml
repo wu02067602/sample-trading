@@ -1,0 +1,14 @@
+# 交易系統登入設定檔
+# 請填入您的永豐期貨登入資訊
+
+# 身份證字號
+person_id: "YOUR_PERSON_ID"
+
+# 帳號
+account: "YOUR_ACCOUNT"
+
+# 密碼
+password: "YOUR_PASSWORD"
+
+# CA 密碼
+ca_password: "YOUR_CA_PASSWORD"

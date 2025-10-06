@@ -1,0 +1,6 @@
+# 測試用的範例設定檔
+
+person_id: "A123456789"
+account: "1234567"
+password: "test_password"
+ca_password: "test_ca_password"
