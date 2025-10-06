@@ -1358,7 +1358,7 @@ class ShioajiConnector:
         """
         取得訂單更新記錄
         
-        返回本次連線期間所有的訂單狀態更新記錄。
+        返回本次連線期間所有的訂單狀態更新記錄（委託回報）。
         
         Returns:
             List[Dict[str, Any]]: 訂單更新列表
@@ -1382,6 +1382,133 @@ class ShioajiConnector:
             - 登出後歷史記錄會被清除
         """
         return self.order_updates.copy()
+    
+    def get_order_update_by_id(self, order_id: str) -> List[Dict[str, Any]]:
+        """
+        根據訂單編號取得委託回報記錄
+        
+        查詢特定訂單的所有狀態更新記錄。
+        
+        Args:
+            order_id (str): 訂單編號
+            
+        Returns:
+            List[Dict[str, Any]]: 該訂單的所有更新記錄
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_order_callback(lambda stat: None)
+            >>> 
+            >>> # 下單
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> trade = connector.place_order(stock, "Buy", 600.0, 1000)
+            >>> 
+            >>> # 查詢該訂單的所有狀態更新
+            >>> updates = connector.get_order_update_by_id(trade.order.id)
+            >>> for update in updates:
+            >>>     print(f"時間: {update['timestamp']}")
+            >>>     print(f"狀態: {update['status']}")
+            
+        Note:
+            - 返回該訂單的所有歷史狀態變更
+            - 按時間順序排列
+        """
+        return [
+            update for update in self.order_updates 
+            if update.get('order_id') == order_id
+        ]
+    
+    def get_order_updates_by_status(self, status: str) -> List[Dict[str, Any]]:
+        """
+        根據狀態取得委託回報記錄
+        
+        查詢特定狀態的所有訂單更新記錄。
+        
+        Args:
+            status (str): 訂單狀態，例如 "Filled", "Cancelled", "Submitted" 等
+            
+        Returns:
+            List[Dict[str, Any]]: 符合狀態的更新記錄列表
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_order_callback(lambda stat: None)
+            >>> 
+            >>> # 執行一些交易...
+            >>> 
+            >>> # 查詢所有已成交的訂單
+            >>> filled_orders = connector.get_order_updates_by_status("Filled")
+            >>> print(f"已成交訂單: {len(filled_orders)} 筆")
+            >>> 
+            >>> # 查詢所有已取消的訂單
+            >>> cancelled_orders = connector.get_order_updates_by_status("Cancelled")
+            >>> print(f"已取消訂單: {len(cancelled_orders)} 筆")
+            
+        Note:
+            - 常見狀態: Submitted (已委託), Filled (全部成交), 
+              Filling (部分成交), Cancelled (已取消), Failed (失敗)
+            - 狀態值區分大小寫
+        """
+        return [
+            update for update in self.order_updates 
+            if update.get('status') == status
+        ]
+    
+    def get_order_updates_summary(self) -> Dict[str, int]:
+        """
+        取得委託回報統計摘要
+        
+        統計各種訂單狀態的數量。
+        
+        Returns:
+            Dict[str, int]: 各狀態的訂單數量統計
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_order_callback(lambda stat: None)
+            >>> 
+            >>> # 執行一些交易...
+            >>> 
+            >>> summary = connector.get_order_updates_summary()
+            >>> print("訂單狀態統計:")
+            >>> for status, count in summary.items():
+            >>>     print(f"  {status}: {count} 筆")
+            
+        Note:
+            - 統計所有接收到的委託回報
+            - 同一訂單可能有多個狀態更新
+        """
+        from collections import Counter
+        statuses = [update.get('status') for update in self.order_updates]
+        return dict(Counter(statuses))
+    
+    def clear_order_update_callbacks(self) -> None:
+        """
+        清除所有委託回報回調函數
+        
+        移除所有已註冊的訂單狀態更新回調函數。
+        
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> 
+            >>> # 註冊回調
+            >>> connector.set_order_callback(lambda stat: print("訂單更新"))
+            >>> 
+            >>> # 清除所有回調
+            >>> connector.clear_order_update_callbacks()
+            >>> print("✅ 已清除所有委託回報回調函數")
+            
+        Note:
+            - 清除後將不再接收訂單狀態更新通知
+            - 不影響已記錄的歷史資料
+            - 可以重新註冊新的回調函數
+        """
+        self.order_update_callbacks.clear()
+        self.logger.info("已清除所有委託回報回調函數")
     
     def get_orders_history(self) -> List[Dict[str, Any]]:
         """
