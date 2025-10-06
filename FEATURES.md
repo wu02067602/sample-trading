@@ -38,6 +38,14 @@
 - ✅ `buy_odd_lot()` - 買進零股
 - ✅ `sell_odd_lot()` - 賣出零股
 
+#### 6. 成交回報查詢
+- ✅ `list_trades()` - 列出所有委託單
+- ✅ `update_status()` - 更新委託狀態
+- ✅ `get_trade_status()` - 取得委託單狀態資訊
+- ✅ `list_positions()` - 查詢持倉部位
+- ✅ `list_profit_loss()` - 查詢當日損益
+- ✅ `get_account_margin()` - 查詢帳戶額度
+
 ## 實作特色
 
 ### 程式碼風格
@@ -59,10 +67,10 @@
 
 ## 程式碼統計
 
-- **主檔案**: shioaji_trader.py (873 行)
-- **函數數量**: 27 個
-- **範例程式**: 5 個
-- **文件檔案**: 2 個
+- **主檔案**: shioaji_trader.py (1104 行)
+- **函數數量**: 33 個
+- **範例程式**: 6 個
+- **文件檔案**: 3 個
 
 ## 使用流程
 
@@ -95,6 +103,12 @@
 | 下單 | `sell_stock()` | 賣出整股 |
 | 下單 | `buy_odd_lot()` | 買進零股 |
 | 下單 | `sell_odd_lot()` | 賣出零股 |
+| 查詢 | `list_trades()` | 列出委託單 |
+| 查詢 | `update_status()` | 更新委託狀態 |
+| 查詢 | `get_trade_status()` | 取得委託狀態 |
+| 查詢 | `list_positions()` | 查詢持倉 |
+| 查詢 | `list_profit_loss()` | 查詢損益 |
+| 查詢 | `get_account_margin()` | 查詢額度 |
 
 ## 範例程式
 
@@ -112,7 +126,10 @@
 
 ⚠️ 包含真實下單操作，請謹慎使用！
 
-### 5. example_complete.py
+### 5. example_trade_status.py
+成交回報查詢範例，展示如何查詢委託狀態、持倉與損益。
+
+### 6. example_complete.py
 完整功能示範，整合所有功能的交易機器人範例。
 
 ## 技術亮點

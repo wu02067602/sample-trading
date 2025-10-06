@@ -14,6 +14,8 @@
 - ✅ 即時報價訂閱功能
 - ✅ Callback 監控機制（報價與委託回報）
 - ✅ 股票下單功能（整股與零股）
+- ✅ 成交回報查詢功能
+- ✅ 持倉與損益查詢功能
 
 ## 安裝
 
@@ -172,7 +174,31 @@ trade = trader.buy_stock("2330", price=500.0, quantity=1000, price_type="MKT")
 trade = trader.buy_stock("2330", price=500.0, quantity=1000, order_type="IOC")
 ```
 
-### 8. 登出系統
+### 8. 查詢委託與成交
+
+```python
+# 列出所有委託單
+trades = trader.list_trades()
+
+# 更新委託狀態
+trader.update_status()
+
+# 查詢特定委託狀態
+status = trader.get_trade_status(trade)
+print(f"委託狀態: {status['status']}")
+print(f"成交數量: {status['deal_quantity']}")
+
+# 查詢持倉
+positions = trader.list_positions()
+
+# 查詢損益
+pnl = trader.list_profit_loss()
+
+# 查詢帳戶額度
+margin = trader.get_account_margin()
+```
+
+### 9. 登出系統
 
 ```python
 trader.logout()
@@ -192,6 +218,7 @@ trader.logout()
 - [Shioaji Callback 教學](https://sinotrade.github.io/zh/tutor/callback/orderdeal_event/)
 - [Shioaji 證券下單教學](https://sinotrade.github.io/zh/tutor/order/Stock/)
 - [Shioaji 零股下單教學](https://sinotrade.github.io/zh/tutor/order/IntradayOdd/)
+- [Shioaji 委託回報教學](https://sinotrade.github.io/zh/tutor/order/order_deal_event/stocks/)
 
 ## 範例程式
 
@@ -199,6 +226,7 @@ trader.logout()
 - `example_contracts.py` - 商品檔查詢範例（詳細示範各種查詢方法）
 - `example_quote_callback.py` - 報價訂閱與 Callback 監控範例
 - `example_order.py` - 股票下單範例（整股與零股下單）
+- `example_trade_status.py` - 成交回報查詢範例（委託狀態、持倉、損益查詢）
 - `example_complete.py` - 完整功能示範（整合所有功能的交易機器人範例）
 
 ## 授權

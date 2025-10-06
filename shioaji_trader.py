@@ -871,3 +871,234 @@ class ShioajiTrader:
             order_type="ROD",
             order_lot="IntradayOdd"
         )
+    
+    def list_trades(self):
+        """列出所有委託單
+        
+        取得當日所有的委託單資訊，包含委託狀態與成交資訊。
+        
+        Returns:
+            List: 委託單列表
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 列出所有委託單
+            >>> trades = trader.list_trades()
+            >>> for trade in trades:
+            ...     print(f"委託單號: {trade.status.id}")
+            ...     print(f"商品: {trade.contract.code}")
+            ...     print(f"狀態: {trade.status.status}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            trades = self.sj.list_trades()
+            return trades
+        except Exception as e:
+            print(f"取得委託單列表失敗：{str(e)}")
+            return []
+    
+    def update_status(self, trade=None):
+        """更新委託狀態
+        
+        更新指定委託單的狀態，若不指定則更新所有委託單。
+        
+        Args:
+            trade: 委託單物件，若為 None 則更新所有委託單
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 下單
+            >>> trade = trader.buy_stock("2330", price=500.0, quantity=1000)
+            >>> 
+            >>> # 更新特定委託狀態
+            >>> trader.update_status(trade)
+            >>> print(f"委託狀態: {trade.status.status}")
+            >>> 
+            >>> # 更新所有委託狀態
+            >>> trader.update_status()
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            if trade:
+                self.sj.update_status(trade)
+            else:
+                self.sj.update_status()
+        except Exception as e:
+            print(f"更新委託狀態失敗：{str(e)}")
+    
+    def get_trade_status(self, trade) -> Dict[str, Any]:
+        """取得委託單狀態資訊
+        
+        取得指定委託單的詳細狀態資訊。
+        
+        Args:
+            trade: 委託單物件
+            
+        Returns:
+            Dict: 包含委託狀態的字典
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 下單
+            >>> trade = trader.buy_stock("2330", price=500.0, quantity=1000)
+            >>> 
+            >>> # 更新並取得狀態
+            >>> trader.update_status(trade)
+            >>> status = trader.get_trade_status(trade)
+            >>> print(f"委託單號: {status['id']}")
+            >>> print(f"狀態: {status['status']}")
+            >>> print(f"委託數量: {status['quantity']}")
+            >>> print(f"成交數量: {status['deal_quantity']}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            # 更新狀態
+            self.update_status(trade)
+            
+            # 取得狀態資訊
+            status = {
+                'id': trade.status.id,
+                'status': trade.status.status,
+                'order_datetime': getattr(trade.status, 'order_datetime', None),
+                'deals': getattr(trade.status, 'deals', []),
+                'deal_quantity': getattr(trade.status, 'deal_quantity', 0),
+                'quantity': trade.order.quantity,
+            }
+            
+            return status
+            
+        except Exception as e:
+            print(f"取得委託狀態失敗：{str(e)}")
+            return {}
+    
+    def list_positions(self, account=None):
+        """查詢持倉部位
+        
+        查詢指定帳戶的持倉部位。
+        
+        Args:
+            account: 帳戶物件，若為 None 則使用預設證券帳戶
+            
+        Returns:
+            List: 持倉部位列表
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 查詢持倉
+            >>> positions = trader.list_positions()
+            >>> for pos in positions:
+            ...     print(f"股票: {pos.code}")
+            ...     print(f"數量: {pos.quantity}")
+            ...     print(f"成本: {pos.price}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            if account is None:
+                account = self.sj.stock_account
+            
+            positions = self.sj.list_positions(account)
+            return positions
+            
+        except Exception as e:
+            print(f"查詢持倉失敗：{str(e)}")
+            return []
+    
+    def list_profit_loss(self, account=None):
+        """查詢當日損益
+        
+        查詢指定帳戶的當日已實現損益與未實現損益。
+        
+        Args:
+            account: 帳戶物件，若為 None 則使用預設證券帳戶
+            
+        Returns:
+            Dict: 損益資訊字典
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 查詢損益
+            >>> pnl = trader.list_profit_loss()
+            >>> print(f"已實現損益: {pnl}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            if account is None:
+                account = self.sj.stock_account
+            
+            pnl = self.sj.list_profit_loss(account)
+            return pnl
+            
+        except Exception as e:
+            print(f"查詢損益失敗：{str(e)}")
+            return {}
+    
+    def get_account_margin(self, account=None):
+        """查詢帳戶額度
+        
+        查詢帳戶的可用額度與使用狀況。
+        
+        Args:
+            account: 帳戶物件，若為 None 則使用預設證券帳戶
+            
+        Returns:
+            Dict: 帳戶額度資訊
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 查詢額度
+            >>> margin = trader.get_account_margin()
+            >>> print(f"可用額度: {margin}")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            if account is None:
+                account = self.sj.stock_account
+            
+            margin = self.sj.account_margin(account)
+            return margin
+            
+        except Exception as e:
+            print(f"查詢帳戶額度失敗：{str(e)}")
+            return {}
