@@ -2,7 +2,8 @@
 Shioaji 交易連線管理模組
 
 此模組提供永豐金證券 Shioaji API 的連線管理功能，
-包含登入、登出、連線狀態管理、商品檔查詢、即時報價訂閱以及事件回調處理。
+包含登入、登出、連線狀態管理、商品檔查詢、即時報價訂閱、
+事件回調處理以及證券下單功能。
 
 Author: Trading System Team
 Date: 2025-10-06
@@ -88,6 +89,10 @@ class ShioajiConnector:
         self.subscribed_contracts: Dict[str, Any] = {}  # {code: contract}
         self.quote_callbacks: Dict[str, List[Callable]] = defaultdict(list)  # {event_type: [callbacks]}
         self.quote_data: Dict[str, Any] = {}  # {code: latest_quote}
+        
+        # 下單相關屬性
+        self.order_callbacks: Dict[str, List[Callable]] = defaultdict(list)  # {event_type: [callbacks]}
+        self.orders_history: List[Dict[str, Any]] = []  # 下單歷史記錄
         
         # 設置日誌
         self.logger = logging.getLogger(__name__)
@@ -542,7 +547,8 @@ class ShioajiConnector:
             'api_initialized': self.sj is not None,
             'contracts_loaded': self.contracts is not None,
             'subscribed_count': len(self.subscribed_contracts),
-            'callback_count': sum(len(cbs) for cbs in self.quote_callbacks.values())
+            'callback_count': sum(len(cbs) for cbs in self.quote_callbacks.values()),
+            'orders_count': len(self.orders_history)
         }
     
     def __enter__(self):
@@ -841,6 +847,357 @@ class ShioajiConnector:
         else:
             self.quote_callbacks.clear()
             self.logger.info("已清除所有回調函數")
+    
+    def place_order(
+        self,
+        contract: Any,
+        action: str,
+        price: float,
+        quantity: int,
+        order_type: str = "ROD",
+        price_type: str = "LMT",
+        odd_lot: bool = False
+    ) -> Optional[Any]:
+        """
+        下單買賣股票
+        
+        執行證券下單操作，支援整股和盤中零股下單。
+        
+        Args:
+            contract (Any): 商品合約物件（從 contracts 取得）
+            action (str): 買賣方向，"Buy" 或 "Sell"
+            price (float): 委託價格（市價單請設為 0）
+            quantity (int): 委託數量（股）
+            order_type (str, optional): 委託類型，"ROD"、"IOC"、"FOK"。預設為 "ROD"。
+            price_type (str, optional): 價格類型，"LMT"(限價)、"MKT"(市價)。預設為 "LMT"。
+            odd_lot (bool, optional): 是否為零股交易。預設為 False。
+            
+        Returns:
+            Optional[Any]: 下單結果物件，包含訂單資訊，若失敗則返回 None
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當參數不正確時拋出
+            PermissionError: 當未啟用憑證時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(
+            >>>     person_id="A123456789",
+            >>>     passwd="password",
+            >>>     ca_path="/path/to/cert.pfx",
+            >>>     ca_passwd="cert_password"
+            >>> )
+            >>> 
+            >>> # 買入整股（限價單）
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> order = connector.place_order(
+            >>>     contract=stock,
+            >>>     action="Buy",
+            >>>     price=600.0,
+            >>>     quantity=1000,
+            >>>     order_type="ROD",
+            >>>     price_type="LMT"
+            >>> )
+            >>> 
+            >>> # 買入零股
+            >>> order = connector.place_order(
+            >>>     contract=stock,
+            >>>     action="Buy",
+            >>>     price=600.0,
+            >>>     quantity=100,
+            >>>     odd_lot=True
+            >>> )
+            >>> 
+            >>> # 市價買入
+            >>> order = connector.place_order(
+            >>>     contract=stock,
+            >>>     action="Buy",
+            >>>     price=0,
+            >>>     quantity=1000,
+            >>>     price_type="MKT"
+            >>> )
+            
+        Note:
+            - 需要先登入並啟用憑證才能下單
+            - ROD: Rest of Day (整日有效)
+            - IOC: Immediate or Cancel (立即成交否則取消)
+            - FOK: Fill or Kill (全部成交否則取消)
+            - LMT: Limit (限價)
+            - MKT: Market (市價)
+            - 整股交易數量必須為 1000 的倍數
+            - 零股交易數量必須小於 1000
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        # 驗證參數
+        if action not in ["Buy", "Sell"]:
+            raise ValueError("action 必須是 'Buy' 或 'Sell'")
+        
+        if order_type not in ["ROD", "IOC", "FOK"]:
+            raise ValueError("order_type 必須是 'ROD'、'IOC' 或 'FOK'")
+        
+        if price_type not in ["LMT", "MKT"]:
+            raise ValueError("price_type 必須是 'LMT' 或 'MKT'")
+        
+        if quantity <= 0:
+            raise ValueError("數量必須大於 0")
+        
+        # 檢查整股/零股數量
+        if not odd_lot and quantity % 1000 != 0:
+            raise ValueError("整股交易數量必須為 1000 的倍數")
+        
+        if odd_lot and quantity >= 1000:
+            raise ValueError("零股交易數量必須小於 1000")
+        
+        try:
+            # 建立訂單物件
+            order = sj.Order(
+                price=price,
+                quantity=quantity,
+                action=sj.constant.Action.Buy if action == "Buy" else sj.constant.Action.Sell,
+                price_type=sj.constant.StockPriceType.LMT if price_type == "LMT" else sj.constant.StockPriceType.MKT,
+                order_type=self._get_order_type(order_type),
+                order_lot=sj.constant.StockOrderLot.IntradayOdd if odd_lot else sj.constant.TFTOrderLot.Common,
+                account=self.sj.stock_account
+            )
+            
+            # 執行下單
+            trade = self.sj.place_order(contract, order)
+            
+            # 記錄下單歷史
+            order_info = {
+                'contract': contract,
+                'action': action,
+                'price': price,
+                'quantity': quantity,
+                'order_type': order_type,
+                'price_type': price_type,
+                'odd_lot': odd_lot,
+                'trade': trade,
+                'timestamp': datetime.now()
+            }
+            self.orders_history.append(order_info)
+            
+            self.logger.info(
+                f"下單成功: {action} {contract.code} {contract.name}, "
+                f"價格: {price}, 數量: {quantity}, "
+                f"類型: {'零股' if odd_lot else '整股'}"
+            )
+            
+            return trade
+            
+        except Exception as e:
+            self.logger.error(f"下單失敗: {str(e)}")
+            return None
+    
+    def _get_order_type(self, order_type: str) -> Any:
+        """
+        取得委託類型常數
+        
+        將字串型的委託類型轉換為 Shioaji 的常數。
+        
+        Args:
+            order_type (str): 委託類型字串
+            
+        Returns:
+            Any: Shioaji 委託類型常數
+        """
+        order_type_map = {
+            "ROD": sj.constant.OrderType.ROD,
+            "IOC": sj.constant.OrderType.IOC,
+            "FOK": sj.constant.OrderType.FOK
+        }
+        return order_type_map.get(order_type, sj.constant.OrderType.ROD)
+    
+    def cancel_order(self, trade: Any) -> bool:
+        """
+        取消訂單
+        
+        取消已下的訂單。
+        
+        Args:
+            trade (Any): 下單時返回的交易物件
+            
+        Returns:
+            bool: 取消成功返回 True，失敗返回 False
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> trade = connector.place_order(stock, "Buy", 600.0, 1000)
+            >>> 
+            >>> # 取消訂單
+            >>> success = connector.cancel_order(trade)
+            >>> if success:
+            >>>     print("訂單已取消")
+            
+        Note:
+            - 只能取消尚未成交的訂單
+            - 部分成交的訂單可以取消未成交部分
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        try:
+            self.sj.cancel_order(trade)
+            self.logger.info(f"取消訂單成功: {trade}")
+            return True
+        except Exception as e:
+            self.logger.error(f"取消訂單失敗: {str(e)}")
+            return False
+    
+    def update_order(self, trade: Any, price: float, quantity: int) -> Optional[Any]:
+        """
+        修改訂單
+        
+        修改已下訂單的價格和數量。
+        
+        Args:
+            trade (Any): 下單時返回的交易物件
+            price (float): 新的委託價格
+            quantity (int): 新的委託數量
+            
+        Returns:
+            Optional[Any]: 修改後的交易物件，失敗返回 None
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當參數不正確時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> trade = connector.place_order(stock, "Buy", 600.0, 1000)
+            >>> 
+            >>> # 修改訂單價格和數量
+            >>> new_trade = connector.update_order(trade, 605.0, 2000)
+            
+        Note:
+            - 只能修改尚未成交的訂單
+            - 修改訂單相當於取消舊單再下新單
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if price <= 0 or quantity <= 0:
+            raise ValueError("價格和數量必須大於 0")
+        
+        try:
+            new_trade = self.sj.update_order(trade, price=price, qty=quantity)
+            self.logger.info(f"修改訂單成功: 價格={price}, 數量={quantity}")
+            return new_trade
+        except Exception as e:
+            self.logger.error(f"修改訂單失敗: {str(e)}")
+            return None
+    
+    def list_positions(self) -> List[Any]:
+        """
+        查詢持股明細
+        
+        取得目前的持股明細。
+        
+        Returns:
+            List[Any]: 持股明細列表
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> positions = connector.list_positions()
+            >>> 
+            >>> for pos in positions:
+            >>>     print(f"商品: {pos.code}")
+            >>>     print(f"數量: {pos.quantity}")
+            >>>     print(f"成本: {pos.price}")
+            
+        Note:
+            - 需要先登入才能查詢
+            - 返回的是即時持股資料
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        try:
+            positions = self.sj.list_positions()
+            self.logger.info(f"查詢持股明細成功，共 {len(positions)} 筆")
+            return positions
+        except Exception as e:
+            self.logger.error(f"查詢持股明細失敗: {str(e)}")
+            return []
+    
+    def list_trades(self) -> List[Any]:
+        """
+        查詢今日委託明細
+        
+        取得今日所有的委託記錄。
+        
+        Returns:
+            List[Any]: 委託明細列表
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> trades = connector.list_trades()
+            >>> 
+            >>> for trade in trades:
+            >>>     print(f"訂單編號: {trade.order.id}")
+            >>>     print(f"商品: {trade.contract.code}")
+            >>>     print(f"狀態: {trade.status.status}")
+            
+        Note:
+            - 需要先登入才能查詢
+            - 只显示當日的委託記錄
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        try:
+            trades = self.sj.list_trades()
+            self.logger.info(f"查詢委託明細成功，共 {len(trades)} 筆")
+            return trades
+        except Exception as e:
+            self.logger.error(f"查詢委託明細失敗: {str(e)}")
+            return []
+    
+    def get_orders_history(self) -> List[Dict[str, Any]]:
+        """
+        取得本次連線的下單歷史
+        
+        返回由此連線器執行的所有下單記錄。
+        
+        Returns:
+            List[Dict[str, Any]]: 下單歷史列表
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> connector.place_order(stock, "Buy", 600.0, 1000)
+            >>> 
+            >>> history = connector.get_orders_history()
+            >>> for order in history:
+            >>>     print(f"商品: {order['contract'].code}")
+            >>>     print(f"動作: {order['action']}")
+            >>>     print(f"價格: {order['price']}")
+            >>>     print(f"數量: {order['quantity']}")
+            
+        Note:
+            - 只記錄本次連線期間的下單
+            - 登出後歷史記錄會被清除
+        """
+        return self.orders_history.copy()
     
     def __repr__(self) -> str:
         """

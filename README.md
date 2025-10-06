@@ -11,8 +11,10 @@
 - ✅ 連線狀態監控
 - ✅ **商品檔管理與查詢（v2.0）**
 - ✅ **股票、期貨商品搜尋功能（v2.0）**
-- ✅ **即時報價訂閱功能（v3.0 新增）**
-- ✅ **Callback 事件處理機制（v3.0 新增）**
+- ✅ **即時報價訂閱功能（v3.0）**
+- ✅ **Callback 事件處理機制（v3.0）**
+- ✅ **證券下單與交易功能（v4.0 新增）**
+- ✅ **訂單管理與持股查詢（v4.0 新增）**
 - ✅ 完整的錯誤處理與日誌記錄
 - ✅ 符合 SOLID 原則的物件導向設計
 
@@ -23,7 +25,8 @@ sample-trading/
 ├── shioaji_connector.py       # Shioaji 連線管理核心模組
 ├── example_usage.py           # 基本使用範例程式
 ├── contract_example.py        # 商品檔查詢範例程式（v2.0）
-├── quote_streaming_example.py # 即時報價訂閱範例（v3.0 新增）
+├── quote_streaming_example.py # 即時報價訂閱範例（v3.0）
+├── order_trading_example.py   # 證券下單交易範例（v4.0 新增）
 ├── requirements.txt           # 專案依賴套件
 ├── 類別圖.md                 # 系統架構與類別圖文件
 ├── README.md                 # 專案說明文件
@@ -104,7 +107,7 @@ with ShioajiConnector(simulation=True) as connector:
 - `search_futures(keyword)` - 搜尋期貨（關鍵字）
 - `get_contracts_summary()` - 取得商品統計摘要
 
-**即時報價訂閱（v3.0 新增）：**
+**即時報價訂閱（v3.0）：**
 - `subscribe_quote(contract, quote_type)` - 訂閱即時報價
 - `unsubscribe_quote(contract)` - 取消訂閱報價
 - `set_quote_callback(callback, event_type)` - 設定報價回調函數
@@ -112,15 +115,25 @@ with ShioajiConnector(simulation=True) as connector:
 - `get_latest_quote(code)` - 取得最新報價快照
 - `clear_quote_callbacks(event_type)` - 清除回調函數
 
+**證券下單與交易（v4.0 新增）：**
+- `place_order(contract, action, price, quantity, ...)` - 下單買賣股票
+- `cancel_order(trade)` - 取消訂單
+- `update_order(trade, price, quantity)` - 修改訂單
+- `list_positions()` - 查詢持股明細
+- `list_trades()` - 查詢今日委託明細
+- `get_orders_history()` - 取得下單歷史記錄
+
 **主要屬性：**
 
 - `sj` - Shioaji API 實例 (登入後可用)
 - `is_connected` - 連線狀態
 - `login_time` - 登入時間
 - `contracts` - 商品檔物件 (v2.0)
-- `subscribed_contracts` - 已訂閱商品字典 (v3.0 新增)
-- `quote_callbacks` - 報價回調函數字典 (v3.0 新增)
-- `quote_data` - 最新報價資料 (v3.0 新增)
+- `subscribed_contracts` - 已訂閱商品字典 (v3.0)
+- `quote_callbacks` - 報價回調函數字典 (v3.0)
+- `quote_data` - 最新報價資料 (v3.0)
+- `order_callbacks` - 下單回調函數字典 (v4.0 新增)
+- `orders_history` - 下單歷史記錄 (v4.0 新增)
 
 詳細的參數說明、返回值、異常處理請參考程式碼中的 docstring。
 
@@ -208,8 +221,9 @@ print(status)
 #     'simulation': True,
 #     'api_initialized': True,
 #     'contracts_loaded': True,
-#     'subscribed_count': 2,  # v3.0 新增
-#     'callback_count': 1     # v3.0 新增
+#     'subscribed_count': 2,
+#     'callback_count': 1,
+#     'orders_count': 5  # v4.0 新增
 # }
 ```
 
@@ -327,6 +341,112 @@ stock = connector.get_stock_by_code("2330")
 connector.subscribe_quote(stock, "tick")
 ```
 
+## 💰 證券下單與交易功能（v4.0 新增）
+
+### 基本下單操作
+
+⚠️ **重要提醒：下單功能需要啟用憑證！**
+
+```python
+from shioaji_connector import ShioajiConnector
+
+connector = ShioajiConnector(simulation=True)
+
+# 登入並啟用憑證（下單必須）
+connector.login(
+    person_id="YOUR_PERSON_ID",
+    passwd="YOUR_PASSWORD",
+    ca_path="/path/to/cert.pfx",  # 憑證檔案
+    ca_passwd="CERT_PASSWORD"       # 憑證密碼
+)
+
+# 取得股票合約
+stock = connector.get_stock_by_code("2330")
+
+# 限價買入 1000 股
+trade = connector.place_order(
+    contract=stock,
+    action="Buy",
+    price=600.0,
+    quantity=1000,
+    order_type="ROD",    # 當日有效單
+    price_type="LMT"     # 限價單
+)
+
+if trade:
+    print(f"✅ 下單成功！訂單編號: {trade.order.id}")
+else:
+    print("❌ 下單失敗")
+```
+
+### 市價單與零股交易
+
+```python
+# 市價買入
+trade = connector.place_order(
+    contract=stock,
+    action="Buy",
+    price=0,  # 市價單價格設 0
+    quantity=1000,
+    price_type="MKT"
+)
+
+# 盤中零股交易（數量 < 1000）
+trade = connector.place_order(
+    contract=stock,
+    action="Buy",
+    price=600.0,
+    quantity=100,  # 零股數量
+    odd_lot=True   # 標記為零股
+)
+```
+
+### 訂單管理
+
+```python
+# 取消訂單
+connector.cancel_order(trade)
+
+# 修改訂單（價格和數量）
+new_trade = connector.update_order(
+    trade=trade,
+    price=605.0,
+    quantity=2000
+)
+```
+
+### 查詢持股與委託
+
+```python
+# 查詢持股明細
+positions = connector.list_positions()
+for pos in positions:
+    print(f"{pos.code}: {pos.quantity} 股, 成本: {pos.price}")
+
+# 查詢今日委託
+trades = connector.list_trades()
+for trade in trades:
+    print(f"{trade.contract.code}: {trade.order.action} {trade.order.quantity}")
+
+# 查詢本次連線的下單歷史
+history = connector.get_orders_history()
+for order in history:
+    print(f"{order['contract'].code}: {order['action']} {order['quantity']}")
+```
+
+### 委託類型說明
+
+| 類型 | 說明 | 適用場景 |
+|------|------|----------|
+| **ROD** | Rest of Day 當日有效單 | 一般交易，未成交部分當日有效 |
+| **IOC** | Immediate or Cancel 立即成交否則取消 | 需要快速成交，不在意部分成交 |
+| **FOK** | Fill or Kill 全部成交否則取消 | 必須全部成交，不接受部分成交 |
+
+| 價格類型 | 說明 |
+|----------|------|
+| **LMT** | 限價單，指定價格下單 |
+| **MKT** | 市價單，以市場價格成交 |
+
 ## 📖 使用範例
 
 ### 基本功能範例
@@ -341,6 +461,24 @@ python example_usage.py
 3. 憑證登入
 4. 便利函數使用
 5. 錯誤處理
+
+### 證券下單交易範例（v4.0 新增）
+
+```bash
+python order_trading_example.py
+```
+
+範例包含：
+1. 基本股票下單
+2. 市價下單
+3. 盤中零股下單
+4. IOC 委託
+5. 取消訂單
+6. 修改訂單
+7. 查詢持股明細
+8. 查詢今日委託
+9. 查詢下單歷史
+10. 批量下單
 
 ### 商品檔查詢範例（v2.0）
 
@@ -418,6 +556,23 @@ connector = ShioajiConnector(simulation=True)
 
 ## 📝 版本記錄
 
+### v4.0.0 (2025-10-06) - 證券下單與交易
+
+- ✅ 新增 `order_callbacks` 屬性管理下單回調
+- ✅ 新增 `orders_history` 屬性記錄下單歷史
+- ✅ 實作 `place_order()` 下單買賣股票
+- ✅ 實作 `cancel_order()` 取消訂單
+- ✅ 實作 `update_order()` 修改訂單
+- ✅ 實作 `list_positions()` 查詢持股明細
+- ✅ 實作 `list_trades()` 查詢委託明細
+- ✅ 實作 `get_orders_history()` 查詢下單歷史
+- ✅ 支援整股、盤中零股交易
+- ✅ 支援限價、市價下單
+- ✅ 支援 ROD、IOC、FOK 委託類型
+- ✅ 完整的參數驗證與錯誤處理
+- ✅ 更新類別圖加入下單架構
+- ✅ 新增 `order_trading_example.py` 下單範例
+
 ### v3.0.0 (2025-10-06) - 即時報價訂閱與 Callback
 
 - ✅ 新增 `subscribed_contracts` 屬性儲存已訂閱商品
@@ -482,5 +637,5 @@ connector = ShioajiConnector(simulation=True)
 ---
 
 **建立日期：** 2025-10-06  
-**版本：** 3.0.0 (即時報價訂閱與 Callback)  
+**版本：** 4.0.0 (證券下單與交易)  
 **作者：** Trading System Team
