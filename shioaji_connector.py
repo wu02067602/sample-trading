@@ -559,3 +559,54 @@ class ShioajiConnector:
         @self.sj.on_deal()
         def deal_callback(deal_status: Any) -> None:
             callback(deal_status)
+    
+    def list_trades(self) -> List[Any]:
+        """
+        取得當日所有委託記錄。
+        
+        此方法會取得當日所有的委託記錄，包括委託狀態、成交狀態等資訊。
+        可用於查詢歷史委託記錄。
+        
+        Returns:
+            List[Any]: 委託記錄列表，每筆記錄包含委託詳細資訊
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> trades = connector.list_trades()
+            >>> for trade in trades:
+            ...     print(f"訂單編號: {trade.order.id}")
+            ...     print(f"委託狀態: {trade.status.status}")
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試查詢委託記錄時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before listing trades.")
+        
+        return self.sj.list_trades()
+    
+    def list_positions(self) -> List[Any]:
+        """
+        取得目前持倉資訊。
+        
+        此方法會取得目前帳戶的所有持倉部位資訊。
+        
+        Returns:
+            List[Any]: 持倉列表，每筆記錄包含持倉詳細資訊
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> positions = connector.list_positions()
+            >>> for position in positions:
+            ...     print(f"商品代碼: {position.code}")
+            ...     print(f"持倉數量: {position.quantity}")
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試查詢持倉時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before listing positions.")
+        
+        return self.sj.list_positions()
