@@ -5,7 +5,7 @@ Shioaji 連線器模組
 """
 
 import shioaji as sj
-from typing import Optional, Any
+from typing import Optional, Any, Callable, Dict, List
 
 
 class ShioajiConnector:
@@ -19,6 +19,7 @@ class ShioajiConnector:
         secret_key (str): 密鑰
         sj (Optional[sj.Shioaji]): Shioaji 連線實例
         contracts (Optional[Any]): 商品檔合約資料
+        subscribed_contracts (List[Any]): 已訂閱的合約列表
     """
     
     def __init__(self, api_key: str, secret_key: str):
@@ -41,6 +42,7 @@ class ShioajiConnector:
         self.secret_key = secret_key
         self.sj: Optional[sj.Shioaji] = None
         self.contracts: Optional[Any] = None
+        self.subscribed_contracts: List[Any] = []
     
     def login(self) -> sj.Shioaji:
         """
@@ -200,3 +202,134 @@ class ShioajiConnector:
             return self.contracts.Futures[futures_code]
         except KeyError as e:
             raise KeyError(f"Futures code '{futures_code}' not found: {e}")
+    
+    def subscribe_quote(self, contract: Any) -> None:
+        """
+        訂閱指定合約的即時報價。
+        
+        此方法會向 Shioaji API 訂閱指定商品的即時報價資料。
+        訂閱後，當有新的報價資料時，會觸發已註冊的 callback 函數。
+        
+        Args:
+            contract (Any): 要訂閱的合約物件（可透過 get_stock_contract 或 get_futures_contract 取得）
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.fetch_contracts()
+            >>> contract = connector.get_stock_contract("2330")
+            >>> connector.subscribe_quote(contract)
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試訂閱報價時
+            ValueError: 當傳入的合約物件無效時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before subscribing.")
+        
+        if contract is None:
+            raise ValueError("Contract cannot be None")
+        
+        try:
+            self.sj.quote.subscribe(
+                self.sj.Contracts.Stocks[contract.code]
+                if hasattr(contract, 'code')
+                else contract
+            )
+            self.subscribed_contracts.append(contract)
+        except AttributeError as e:
+            raise ValueError(f"Invalid contract object: {e}")
+    
+    def unsubscribe_quote(self, contract: Any) -> None:
+        """
+        取消訂閱指定合約的即時報價。
+        
+        Args:
+            contract (Any): 要取消訂閱的合約物件
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.fetch_contracts()
+            >>> contract = connector.get_stock_contract("2330")
+            >>> connector.subscribe_quote(contract)
+            >>> connector.unsubscribe_quote(contract)
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試取消訂閱時
+            ValueError: 當傳入的合約物件無效時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first.")
+        
+        if contract is None:
+            raise ValueError("Contract cannot be None")
+        
+        try:
+            self.sj.quote.unsubscribe(
+                self.sj.Contracts.Stocks[contract.code]
+                if hasattr(contract, 'code')
+                else contract
+            )
+            if contract in self.subscribed_contracts:
+                self.subscribed_contracts.remove(contract)
+        except AttributeError as e:
+            raise ValueError(f"Invalid contract object: {e}")
+    
+    def set_quote_callback(self, callback: Callable[[Any, Any], None]) -> None:
+        """
+        設定即時報價的 callback 函數。
+        
+        當訂閱的商品有新報價資料時，會自動呼叫此 callback 函數。
+        Callback 函數應該接受兩個參數：(topic, quote_data)
+        
+        Args:
+            callback (Callable[[Any, Any], None]): 
+                Callback 函數，接收兩個參數：
+                - topic: 報價主題（包含交易所和商品代碼資訊）
+                - quote_data: 報價資料物件（包含成交價、量、買賣價等）
+        
+        Examples:
+            >>> def my_quote_handler(topic, quote):
+            ...     print(f"代碼: {topic}, 成交價: {quote.close}")
+            >>> 
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.set_quote_callback(my_quote_handler)
+            >>> connector.fetch_contracts()
+            >>> contract = connector.get_stock_contract("2330")
+            >>> connector.subscribe_quote(contract)
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試設定 callback 時
+            TypeError: 當傳入的不是可呼叫物件時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before setting callback.")
+        
+        if not callable(callback):
+            raise TypeError("Callback must be a callable function")
+        
+        # 使用裝飾器方式註冊 callback
+        @self.sj.on_quote_stk_v1()
+        def quote_callback(topic: str, quote: Any) -> None:
+            callback(topic, quote)
+    
+    def get_subscribed_contracts(self) -> List[Any]:
+        """
+        取得目前已訂閱的合約列表。
+        
+        Returns:
+            List[Any]: 已訂閱的合約物件列表
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.fetch_contracts()
+            >>> contract = connector.get_stock_contract("2330")
+            >>> connector.subscribe_quote(contract)
+            >>> subscribed = connector.get_subscribed_contracts()
+            >>> print(len(subscribed))
+            1
+        """
+        return self.subscribed_contracts.copy()
