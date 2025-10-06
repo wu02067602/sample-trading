@@ -5,7 +5,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 
 
@@ -117,6 +117,38 @@ class ITradingClient(ABC):
         
         Returns:
             Optional[Any]: 商品檔物件
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def subscribe_quote(self, contracts: List[Any]) -> Dict[str, Any]:
+        """
+        訂閱報價
+        
+        Args:
+            contracts (List[Any]): 要訂閱的商品列表
+        
+        Returns:
+            Dict[str, Any]: 訂閱結果字典
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def unsubscribe_quote(self, contracts: List[Any]) -> Dict[str, Any]:
+        """
+        取消訂閱報價
+        
+        Args:
+            contracts (List[Any]): 要取消訂閱的商品列表
+        
+        Returns:
+            Dict[str, Any]: 取消訂閱結果字典
         
         Raises:
             NotImplementedError: 子類別必須實作此方法

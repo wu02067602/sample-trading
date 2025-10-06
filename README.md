@@ -22,6 +22,7 @@
 ├── requirements.txt               # Python 依賴套件
 ├── trading_client_interface.py   # 交易客戶端抽象介面
 ├── config_validator.py            # 配置驗證器實作
+├── quote_callback_handler.py     # 報價與委託成交回調處理器
 └── shioaji_client.py             # 永豐 Shioaji 客戶端實作
 ```
 
@@ -63,6 +64,12 @@ if result["success"]:
         # 取得股票商品
         stocks = client.get_contracts("Stocks")
         print(f"股票商品數量: {len(stocks)}")
+        
+        # 訂閱台積電報價
+        tsmc = stocks["2330"]
+        subscribe_result = client.subscribe_quote([tsmc])
+        if subscribe_result["success"]:
+            print("訂閱報價成功")
     
     # 取得帳戶資訊
     accounts = client.get_accounts()
@@ -96,6 +103,39 @@ if contract_result["success"]:
     
     # 取得選擇權商品
     options = client.get_contracts("Options")
+```
+
+### 訂閱報價與回調處理
+
+```python
+from quote_callback_handler import QuoteCallbackHandler
+
+# 自訂報價處理函數
+def my_quote_handler(topic, quote):
+    print(f"商品: {topic}, 成交價: {quote.close}, 成交量: {quote.volume}")
+
+# 建立自訂報價處理器
+quote_handler = QuoteCallbackHandler(custom_handler=my_quote_handler)
+
+# 建立客戶端並注入回調處理器
+client = ShioajiClient(quote_callback=quote_handler)
+client.login(config)
+client.fetch_contracts()
+
+# 訂閱報價
+stocks = client.get_contracts("Stocks")
+tsmc = stocks["2330"]
+result = client.subscribe_quote([tsmc])
+
+# 報價會透過 my_quote_handler 處理
+# 也可以直接取得報價資料
+import time
+time.sleep(5)  # 等待接收報價
+latest_quote = quote_handler.get_latest_quote("2330")
+print(f"最新報價: {latest_quote}")
+
+# 取消訂閱
+client.unsubscribe_quote([tsmc])
 ```
 
 ### 啟用憑證（用於下單）
@@ -169,6 +209,29 @@ client = ShioajiClient(validator=custom_validator)
 - `get_accounts() -> Optional[Any]`: 取得帳戶資訊
 - `fetch_contracts() -> Dict[str, Any]`: 取得商品檔
 - `get_contracts(contract_type: Optional[str]) -> Optional[Any]`: 取得已載入的商品檔資料
+- `subscribe_quote(contracts: List[Any]) -> Dict[str, Any]`: 訂閱報價
+- `unsubscribe_quote(contracts: List[Any]) -> Dict[str, Any]`: 取消訂閱報價
+- `set_order_callback() -> Dict[str, Any]`: 設置委託成交回調
+
+### QuoteCallbackHandler
+
+報價回調處理器
+
+**方法**：
+- `on_quote(topic: str, quote: Any)`: 處理報價回調
+- `get_latest_quote(topic: str) -> Optional[Dict]`: 取得最新報價
+- `get_all_quotes(topic: str) -> List[Dict]`: 取得所有報價歷史
+- `clear_quotes(topic: Optional[str])`: 清除報價資料
+
+### OrderDealCallbackHandler
+
+委託成交回調處理器
+
+**方法**：
+- `on_order(order: Any)`: 處理委託回調
+- `on_deal(deal: Any)`: 處理成交回調
+- `get_orders() -> List[Dict]`: 取得所有委託記錄
+- `get_deals() -> List[Dict]`: 取得所有成交記錄
 
 ## 錯誤處理
 

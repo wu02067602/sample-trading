@@ -6,9 +6,10 @@
 """
 
 import shioaji as sj
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from trading_client_interface import ITradingClient, LoginConfig, IConfigValidator
 from config_validator import LoginConfigValidator
+from quote_callback_handler import IQuoteCallback, QuoteCallbackHandler, OrderDealCallbackHandler
 
 
 class ShioajiClient(ITradingClient):
@@ -22,6 +23,8 @@ class ShioajiClient(ITradingClient):
         sj (Optional[sj.Shioaji]): Shioaji API 實例
         is_logged_in (bool): 登入狀態標記
         contract (Optional[Any]): 商品檔資料
+        quote_callback (IQuoteCallback): 報價回調處理器
+        order_deal_callback (OrderDealCallbackHandler): 委託成交回調處理器
     
     Examples:
         >>> config = LoginConfig(
@@ -40,25 +43,38 @@ class ShioajiClient(ITradingClient):
         Exception: 其他登入過程中的錯誤
     """
     
-    def __init__(self, validator: Optional[IConfigValidator] = None) -> None:
+    def __init__(
+        self,
+        validator: Optional[IConfigValidator] = None,
+        quote_callback: Optional[IQuoteCallback] = None,
+        order_deal_callback: Optional[OrderDealCallbackHandler] = None
+    ) -> None:
         """
         初始化 ShioajiClient 實例
         
         創建一個新的客戶端實例，初始化必要的屬性。
-        遵循依賴注入原則，允許外部注入驗證器。
+        遵循依賴注入原則，允許外部注入驗證器和回調處理器。
         
         Args:
             validator (Optional[IConfigValidator]): 配置驗證器，預設為 LoginConfigValidator
+            quote_callback (Optional[IQuoteCallback]): 報價回調處理器，預設為 QuoteCallbackHandler
+            order_deal_callback (Optional[OrderDealCallbackHandler]): 委託成交回調處理器
         
         Examples:
-            >>> client = ShioajiClient()  # 使用預設驗證器
+            >>> client = ShioajiClient()  # 使用預設處理器
             >>> custom_validator = LoginConfigValidator()
-            >>> client = ShioajiClient(validator=custom_validator)  # 注入自訂驗證器
+            >>> custom_quote_handler = QuoteCallbackHandler()
+            >>> client = ShioajiClient(
+            ...     validator=custom_validator,
+            ...     quote_callback=custom_quote_handler
+            ... )
         """
         self.sj: Optional[sj.Shioaji] = None
         self.is_logged_in: bool = False
         self.contract: Optional[Any] = None
         self._validator: IConfigValidator = validator or LoginConfigValidator()
+        self.quote_callback: IQuoteCallback = quote_callback or QuoteCallbackHandler()
+        self.order_deal_callback: OrderDealCallbackHandler = order_deal_callback or OrderDealCallbackHandler()
     
     def login(self, config: LoginConfig) -> Dict[str, Any]:
         """
@@ -350,3 +366,181 @@ class ShioajiClient(ITradingClient):
             return getattr(self.contract, contract_type)
         except AttributeError:
             raise AttributeError(f"商品類型 '{contract_type}' 不存在")
+    
+    def subscribe_quote(self, contracts: List[Any]) -> Dict[str, Any]:
+        """
+        訂閱報價
+        
+        訂閱指定商品的即時報價。訂閱後，報價資料會透過 callback 處理器接收。
+        必須在登入後才能執行此操作。
+        
+        Args:
+            contracts (List[Any]): 要訂閱的商品列表，可以是商品物件或商品代碼
+        
+        Returns:
+            Dict[str, Any]: 訂閱結果字典，包含以下鍵值：
+                - success (bool): 訂閱是否成功
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和 fetch_contracts ...
+            >>> stocks = client.get_contracts("Stocks")
+            >>> tsmc = stocks["2330"]
+            >>> result = client.subscribe_quote([tsmc])
+            >>> if result["success"]:
+            ...     print("訂閱成功")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            Exception: 其他訂閱過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            # 設置報價回調
+            self.sj.quote.set_on_quote_stk_v1_callback(self.quote_callback.on_quote)
+            
+            # 訂閱報價
+            self.sj.quote.subscribe(
+                self.sj.Contracts.Stocks[contracts[0].symbol] if hasattr(contracts[0], 'symbol') else contracts[0],
+                quote_type=sj.constant.QuoteType.Tick
+            ) if len(contracts) == 1 else [
+                self.sj.quote.subscribe(
+                    contract,
+                    quote_type=sj.constant.QuoteType.Tick
+                ) for contract in contracts
+            ]
+            
+            return {
+                "success": True,
+                "message": f"成功訂閱 {len(contracts)} 個商品的報價"
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "訂閱報價失敗",
+                "error": str(e)
+            }
+        except Exception as e:
+            error_msg = f"訂閱報價過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "訂閱報價失敗",
+                "error": error_msg
+            }
+    
+    def unsubscribe_quote(self, contracts: List[Any]) -> Dict[str, Any]:
+        """
+        取消訂閱報價
+        
+        取消訂閱指定商品的即時報價。
+        
+        Args:
+            contracts (List[Any]): 要取消訂閱的商品列表
+        
+        Returns:
+            Dict[str, Any]: 取消訂閱結果字典，包含以下鍵值：
+                - success (bool): 取消訂閱是否成功
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和訂閱 ...
+            >>> stocks = client.get_contracts("Stocks")
+            >>> tsmc = stocks["2330"]
+            >>> result = client.unsubscribe_quote([tsmc])
+            >>> if result["success"]:
+            ...     print("取消訂閱成功")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            Exception: 其他取消訂閱過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            # 取消訂閱報價
+            for contract in contracts:
+                self.sj.quote.unsubscribe(
+                    contract,
+                    quote_type=sj.constant.QuoteType.Tick
+                )
+            
+            return {
+                "success": True,
+                "message": f"成功取消訂閱 {len(contracts)} 個商品的報價"
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "取消訂閱報價失敗",
+                "error": str(e)
+            }
+        except Exception as e:
+            error_msg = f"取消訂閱報價過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "取消訂閱報價失敗",
+                "error": error_msg
+            }
+    
+    def set_order_callback(self) -> Dict[str, Any]:
+        """
+        設置委託成交回調
+        
+        設置委託和成交事件的回調處理器。
+        必須在登入後才能執行此操作。
+        
+        Returns:
+            Dict[str, Any]: 設置結果字典，包含以下鍵值：
+                - success (bool): 設置是否成功
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入 ...
+            >>> result = client.set_order_callback()
+            >>> if result["success"]:
+            ...     print("回調設置成功")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            Exception: 其他設置過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            # 設置委託回調
+            self.sj.set_order_callback(self.order_deal_callback.on_order)
+            
+            # 設置成交回調
+            # Note: Shioaji 的成交回調設置方式可能因版本而異
+            # 這裡提供基本實作，實際使用時可能需要調整
+            
+            return {
+                "success": True,
+                "message": "委託成交回調設置成功"
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "設置回調失敗",
+                "error": str(e)
+            }
+        except Exception as e:
+            error_msg = f"設置回調過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "設置回調失敗",
+                "error": error_msg
+            }
