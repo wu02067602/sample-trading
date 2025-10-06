@@ -31,6 +31,13 @@
 #### 4. 委託監控
 - ✅ `set_order_callback()` - 設定委託回報 callback
 
+#### 5. 股票下單
+- ✅ `place_order()` - 通用下單方法
+- ✅ `buy_stock()` - 買進整股
+- ✅ `sell_stock()` - 賣出整股
+- ✅ `buy_odd_lot()` - 買進零股
+- ✅ `sell_odd_lot()` - 賣出零股
+
 ## 實作特色
 
 ### 程式碼風格
@@ -52,9 +59,9 @@
 
 ## 程式碼統計
 
-- **主檔案**: shioaji_trader.py (578 行)
-- **函數數量**: 22 個
-- **範例程式**: 4 個
+- **主檔案**: shioaji_trader.py (873 行)
+- **函數數量**: 27 個
+- **範例程式**: 5 個
 - **文件檔案**: 2 個
 
 ## 使用流程
@@ -83,6 +90,11 @@
 | 報價 | `set_quote_callback()` | 設定報價 callback |
 | 報價 | `get_subscribed_contracts()` | 已訂閱清單 |
 | 委託 | `set_order_callback()` | 設定委託 callback |
+| 下單 | `place_order()` | 通用下單 |
+| 下單 | `buy_stock()` | 買進整股 |
+| 下單 | `sell_stock()` | 賣出整股 |
+| 下單 | `buy_odd_lot()` | 買進零股 |
+| 下單 | `sell_odd_lot()` | 賣出零股 |
 
 ## 範例程式
 
@@ -95,7 +107,12 @@
 ### 3. example_quote_callback.py
 報價訂閱與 Callback 監控範例，展示即時報價接收。
 
-### 4. example_complete.py
+### 4. example_order.py
+股票下單範例，展示整股與零股下單功能。
+
+⚠️ 包含真實下單操作，請謹慎使用！
+
+### 5. example_complete.py
 完整功能示範，整合所有功能的交易機器人範例。
 
 ## 技術亮點

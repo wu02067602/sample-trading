@@ -13,6 +13,7 @@
 - ✅ 商品檔查詢與搜尋功能
 - ✅ 即時報價訂閱功能
 - ✅ Callback 監控機制（報價與委託回報）
+- ✅ 股票下單功能（整股與零股）
 
 ## 安裝
 
@@ -149,7 +150,29 @@ def order_callback(stat, msg):
 trader.set_order_callback(order_callback)
 ```
 
-### 7. 登出系統
+### 7. 股票下單
+
+```python
+# 買進整股（1 張 = 1000 股）
+trade = trader.buy_stock("2330", price=500.0, quantity=1000)
+
+# 賣出整股
+trade = trader.sell_stock("2330", price=510.0, quantity=1000)
+
+# 買進零股（1-999 股）
+trade = trader.buy_odd_lot("2330", price=500.0, quantity=100)
+
+# 賣出零股
+trade = trader.sell_odd_lot("2330", price=510.0, quantity=100)
+
+# 使用市價單
+trade = trader.buy_stock("2330", price=500.0, quantity=1000, price_type="MKT")
+
+# 使用 IOC 委託
+trade = trader.buy_stock("2330", price=500.0, quantity=1000, order_type="IOC")
+```
+
+### 8. 登出系統
 
 ```python
 trader.logout()
@@ -167,12 +190,15 @@ trader.logout()
 - [Shioaji 商品檔教學](https://sinotrade.github.io/zh/tutor/contract/)
 - [Shioaji 報價訂閱教學](https://sinotrade.github.io/zh/tutor/market_data/streaming/stocks/)
 - [Shioaji Callback 教學](https://sinotrade.github.io/zh/tutor/callback/orderdeal_event/)
+- [Shioaji 證券下單教學](https://sinotrade.github.io/zh/tutor/order/Stock/)
+- [Shioaji 零股下單教學](https://sinotrade.github.io/zh/tutor/order/IntradayOdd/)
 
 ## 範例程式
 
 - `example_usage.py` - 基本使用範例（含登入、帳戶管理、商品查詢）
 - `example_contracts.py` - 商品檔查詢範例（詳細示範各種查詢方法）
 - `example_quote_callback.py` - 報價訂閱與 Callback 監控範例
+- `example_order.py` - 股票下單範例（整股與零股下單）
 - `example_complete.py` - 完整功能示範（整合所有功能的交易機器人範例）
 
 ## 授權

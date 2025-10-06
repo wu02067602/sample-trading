@@ -576,3 +576,298 @@ class ShioajiTrader:
             ...     print(f"{contract.code}: {contract.name}")
         """
         return self._subscribed_contracts.copy()
+    
+    def place_order(
+        self,
+        contract,
+        action: str,
+        price: float,
+        quantity: int,
+        price_type: str = "LMT",
+        order_type: str = "ROD",
+        order_lot: str = "Common"
+    ):
+        """下單
+        
+        下訂單到永豐金證券系統。
+        
+        Args:
+            contract: 商品物件，可從 contracts 取得
+            action: 買賣方向，"Buy" 或 "Sell"
+            price: 委託價格
+            quantity: 委託數量（股數）
+            price_type: 價格類型，"LMT" (限價) 或 "MKT" (市價)，預設 "LMT"
+            order_type: 委託類型，"ROD" (當日有效) 或 "IOC" (立即成交否則取消) 或 "FOK" (全部成交否則取消)，
+                       預設 "ROD"
+            order_lot: 交易單位，"Common" (整股) 或 "IntradayOdd" (盤中零股)，
+                      預設 "Common"
+            
+        Returns:
+            Trade: 交易物件，包含委託資訊
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當參數無效時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 下單買進台積電
+            >>> tsmc = trader.get_stock("2330")
+            >>> trade = trader.place_order(
+            ...     contract=tsmc,
+            ...     action="Buy",
+            ...     price=500.0,
+            ...     quantity=1000
+            ... )
+            >>> print(trade.status.status)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        # 驗證參數
+        valid_actions = ["Buy", "Sell"]
+        if action not in valid_actions:
+            raise ValueError(f"action 必須是 {valid_actions} 其中之一")
+        
+        valid_price_types = ["LMT", "MKT"]
+        if price_type not in valid_price_types:
+            raise ValueError(f"price_type 必須是 {valid_price_types} 其中之一")
+        
+        valid_order_types = ["ROD", "IOC", "FOK"]
+        if order_type not in valid_order_types:
+            raise ValueError(f"order_type 必須是 {valid_order_types} 其中之一")
+        
+        valid_order_lots = ["Common", "IntradayOdd"]
+        if order_lot not in valid_order_lots:
+            raise ValueError(f"order_lot 必須是 {valid_order_lots} 其中之一")
+        
+        try:
+            # 建立訂單
+            order = self.sj.Order(
+                price=price,
+                quantity=quantity,
+                action=getattr(sj.constant.Action, action),
+                price_type=getattr(sj.constant.StockPriceType, price_type),
+                order_type=getattr(sj.constant.OrderType, order_type),
+                order_lot=getattr(sj.constant.StockOrderLot, order_lot),
+                account=self.sj.stock_account
+            )
+            
+            # 下單
+            trade = self.sj.place_order(contract, order)
+            
+            print(f"下單成功：{action} {contract.code} {quantity}股 @ {price}")
+            return trade
+            
+        except Exception as e:
+            print(f"下單失敗：{str(e)}")
+            raise
+    
+    def buy_stock(
+        self,
+        code: str,
+        price: float,
+        quantity: int,
+        price_type: str = "LMT",
+        order_type: str = "ROD"
+    ):
+        """買進股票（整股）
+        
+        簡化版的買進股票函數。
+        
+        Args:
+            code: 股票代碼，例如 "2330"
+            price: 委託價格
+            quantity: 委託數量（股數，必須是 1000 的倍數）
+            price_type: 價格類型，"LMT" 或 "MKT"，預設 "LMT"
+            order_type: 委託類型，"ROD" 或 "IOC" 或 "FOK"，預設 "ROD"
+            
+        Returns:
+            Trade: 交易物件
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當查不到股票或參數無效時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 買進 1 張台積電
+            >>> trade = trader.buy_stock("2330", price=500.0, quantity=1000)
+            >>> 
+            >>> # 以市價買進
+            >>> trade = trader.buy_stock("2330", price=500.0, quantity=1000, price_type="MKT")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        # 查詢股票
+        contract = self.get_stock(code)
+        if not contract:
+            raise ValueError(f"查不到股票代碼：{code}")
+        
+        # 下單
+        return self.place_order(
+            contract=contract,
+            action="Buy",
+            price=price,
+            quantity=quantity,
+            price_type=price_type,
+            order_type=order_type,
+            order_lot="Common"
+        )
+    
+    def sell_stock(
+        self,
+        code: str,
+        price: float,
+        quantity: int,
+        price_type: str = "LMT",
+        order_type: str = "ROD"
+    ):
+        """賣出股票（整股）
+        
+        簡化版的賣出股票函數。
+        
+        Args:
+            code: 股票代碼，例如 "2330"
+            price: 委託價格
+            quantity: 委託數量（股數，必須是 1000 的倍數）
+            price_type: 價格類型，"LMT" 或 "MKT"，預設 "LMT"
+            order_type: 委託類型，"ROD" 或 "IOC" 或 "FOK"，預設 "ROD"
+            
+        Returns:
+            Trade: 交易物件
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當查不到股票或參數無效時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 賣出 1 張台積電
+            >>> trade = trader.sell_stock("2330", price=500.0, quantity=1000)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        # 查詢股票
+        contract = self.get_stock(code)
+        if not contract:
+            raise ValueError(f"查不到股票代碼：{code}")
+        
+        # 下單
+        return self.place_order(
+            contract=contract,
+            action="Sell",
+            price=price,
+            quantity=quantity,
+            price_type=price_type,
+            order_type=order_type,
+            order_lot="Common"
+        )
+    
+    def buy_odd_lot(
+        self,
+        code: str,
+        price: float,
+        quantity: int,
+        price_type: str = "LMT"
+    ):
+        """買進零股
+        
+        買進盤中零股，數量可以小於 1000 股。
+        
+        Args:
+            code: 股票代碼，例如 "2330"
+            price: 委託價格
+            quantity: 委託數量（股數，1-999 股）
+            price_type: 價格類型，"LMT" 或 "MKT"，預設 "LMT"
+            
+        Returns:
+            Trade: 交易物件
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當查不到股票或參數無效時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 買進 100 股台積電零股
+            >>> trade = trader.buy_odd_lot("2330", price=500.0, quantity=100)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        # 查詢股票
+        contract = self.get_stock(code)
+        if not contract:
+            raise ValueError(f"查不到股票代碼：{code}")
+        
+        # 下單（零股只能 ROD）
+        return self.place_order(
+            contract=contract,
+            action="Buy",
+            price=price,
+            quantity=quantity,
+            price_type=price_type,
+            order_type="ROD",
+            order_lot="IntradayOdd"
+        )
+    
+    def sell_odd_lot(
+        self,
+        code: str,
+        price: float,
+        quantity: int,
+        price_type: str = "LMT"
+    ):
+        """賣出零股
+        
+        賣出盤中零股，數量可以小於 1000 股。
+        
+        Args:
+            code: 股票代碼，例如 "2330"
+            price: 委託價格
+            quantity: 委託數量（股數，1-999 股）
+            price_type: 價格類型，"LMT" 或 "MKT"，預設 "LMT"
+            
+        Returns:
+            Trade: 交易物件
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當查不到股票或參數無效時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 賣出 100 股台積電零股
+            >>> trade = trader.sell_odd_lot("2330", price=500.0, quantity=100)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        # 查詢股票
+        contract = self.get_stock(code)
+        if not contract:
+            raise ValueError(f"查不到股票代碼：{code}")
+        
+        # 下單（零股只能 ROD）
+        return self.place_order(
+            contract=contract,
+            action="Sell",
+            price=price,
+            quantity=quantity,
+            price_type=price_type,
+            order_type="ROD",
+            order_lot="IntradayOdd"
+        )
