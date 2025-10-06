@@ -13,8 +13,9 @@
 - ✅ **股票、期貨商品搜尋功能（v2.0）**
 - ✅ **即時報價訂閱功能（v3.0）**
 - ✅ **Callback 事件處理機制（v3.0）**
-- ✅ **證券下單與交易功能（v4.0 新增）**
-- ✅ **訂單管理與持股查詢（v4.0 新增）**
+- ✅ **證券下單與交易功能（v4.0）**
+- ✅ **訂單管理與持股查詢（v4.0）**
+- ✅ **成交回報與訂單狀態監控（v4.1 新增）**
 - ✅ 完整的錯誤處理與日誌記錄
 - ✅ 符合 SOLID 原則的物件導向設計
 
@@ -26,7 +27,8 @@ sample-trading/
 ├── example_usage.py           # 基本使用範例程式
 ├── contract_example.py        # 商品檔查詢範例程式（v2.0）
 ├── quote_streaming_example.py # 即時報價訂閱範例（v3.0）
-├── order_trading_example.py   # 證券下單交易範例（v4.0 新增）
+├── order_trading_example.py   # 證券下單交易範例（v4.0）
+├── deal_event_example.py      # 成交回報監控範例（v4.1 新增）
 ├── requirements.txt           # 專案依賴套件
 ├── 類別圖.md                 # 系統架構與類別圖文件
 ├── README.md                 # 專案說明文件
@@ -115,13 +117,19 @@ with ShioajiConnector(simulation=True) as connector:
 - `get_latest_quote(code)` - 取得最新報價快照
 - `clear_quote_callbacks(event_type)` - 清除回調函數
 
-**證券下單與交易（v4.0 新增）：**
+**證券下單與交易（v4.0）：**
 - `place_order(contract, action, price, quantity, ...)` - 下單買賣股票
 - `cancel_order(trade)` - 取消訂單
 - `update_order(trade, price, quantity)` - 修改訂單
 - `list_positions()` - 查詢持股明細
 - `list_trades()` - 查詢今日委託明細
 - `get_orders_history()` - 取得下單歷史記錄
+
+**成交回報與訂單狀態（v4.1 新增）：**
+- `set_order_callback(callback)` - 設定訂單狀態更新回調
+- `set_deal_callback(callback)` - 設定成交回報回調
+- `get_deals_history()` - 取得成交歷史記錄
+- `get_order_updates()` - 取得訂單更新記錄
 
 **主要屬性：**
 
@@ -132,8 +140,12 @@ with ShioajiConnector(simulation=True) as connector:
 - `subscribed_contracts` - 已訂閱商品字典 (v3.0)
 - `quote_callbacks` - 報價回調函數字典 (v3.0)
 - `quote_data` - 最新報價資料 (v3.0)
-- `order_callbacks` - 下單回調函數字典 (v4.0 新增)
-- `orders_history` - 下單歷史記錄 (v4.0 新增)
+- `order_callbacks` - 下單回調函數字典 (v4.0)
+- `orders_history` - 下單歷史記錄 (v4.0)
+- `deal_callbacks` - 成交回調函數列表 (v4.1 新增)
+- `order_update_callbacks` - 訂單更新回調函數列表 (v4.1 新增)
+- `deals_history` - 成交歷史記錄 (v4.1 新增)
+- `order_updates` - 訂單更新記錄 (v4.1 新增)
 
 詳細的參數說明、返回值、異常處理請參考程式碼中的 docstring。
 
@@ -223,7 +235,9 @@ print(status)
 #     'contracts_loaded': True,
 #     'subscribed_count': 2,
 #     'callback_count': 1,
-#     'orders_count': 5  # v4.0 新增
+#     'orders_count': 5,
+#     'deals_count': 3,  # v4.1 新增
+#     'order_updates_count': 8  # v4.1 新增
 # }
 ```
 
@@ -447,6 +461,100 @@ for order in history:
 | **LMT** | 限價單，指定價格下單 |
 | **MKT** | 市價單，以市場價格成交 |
 
+## 📢 成交回報與訂單狀態（v4.1 新增）
+
+### 訂單狀態監控
+
+```python
+from shioaji_connector import ShioajiConnector
+
+connector = ShioajiConnector(simulation=True)
+connector.login(
+    person_id="YOUR_PERSON_ID",
+    passwd="YOUR_PASSWORD",
+    ca_path="/path/to/cert.pfx",
+    ca_passwd="CERT_PASSWORD"
+)
+
+# 定義訂單狀態處理函數
+def order_status_handler(stat):
+    print(f"訂單狀態: {stat.status}")
+    print(f"訂單編號: {stat.order_id}")
+    print(f"已成交數量: {stat.deal_quantity}")
+
+# 註冊回調
+connector.set_order_callback(order_status_handler)
+
+# 下單，狀態變化會自動觸發 callback
+stock = connector.get_stock_by_code("2330")
+connector.place_order(stock, "Buy", 600.0, 1000)
+```
+
+### 成交回報通知
+
+```python
+# 定義成交處理函數
+def deal_handler(deal):
+    print(f"成交通知: {deal.code}")
+    print(f"成交價格: {deal.price}")
+    print(f"成交數量: {deal.quantity}")
+    print(f"成交時間: {deal.ts}")
+
+# 註冊成交回調
+connector.set_deal_callback(deal_handler)
+
+# 下單成交後會自動觸發 callback
+connector.place_order(stock, "Buy", 0, 1000, price_type="MKT")
+```
+
+### 同時監控訂單和成交
+
+```python
+# 同時註冊兩種 callback
+connector.set_order_callback(order_status_handler)
+connector.set_deal_callback(deal_handler)
+
+# 下單後會同時接收訂單狀態和成交回報
+connector.place_order(stock, "Buy", 600.0, 1000)
+```
+
+### 查詢歷史記錄
+
+```python
+# 查詢成交歷史
+deals = connector.get_deals_history()
+for deal in deals:
+    print(f"{deal['code']}: {deal['price']} x {deal['quantity']}")
+
+# 查詢訂單更新歷史
+updates = connector.get_order_updates()
+for update in updates:
+    print(f"{update['order_id']}: {update['status']}")
+```
+
+### 多個 Callback 處理
+
+```python
+# 可以為同一事件註冊多個 callback
+
+def logger(deal):
+    print(f"[LOG] 成交: {deal.code}")
+
+def notifier(deal):
+    print(f"[NOTIFY] 📢 {deal.code} 已成交")
+
+def calculator(deal):
+    cost = deal.price * deal.quantity
+    print(f"[COST] 成本: {cost:,.0f} 元")
+
+# 註冊多個 callback
+connector.set_deal_callback(logger)
+connector.set_deal_callback(notifier)
+connector.set_deal_callback(calculator)
+
+# 成交時所有 callback 都會被呼叫
+```
+
 ## 📖 使用範例
 
 ### 基本功能範例
@@ -462,7 +570,22 @@ python example_usage.py
 4. 便利函數使用
 5. 錯誤處理
 
-### 證券下單交易範例（v4.0 新增）
+### 成交回報監控範例（v4.1 新增）
+
+```bash
+python deal_event_example.py
+```
+
+範例包含：
+1. 訂單狀態回報
+2. 成交回報
+3. 同時監控訂單和成交
+4. 查詢成交歷史
+5. 查詢訂單更新歷史
+6. 註冊多個 Callback
+7. 檢查連線狀態（含成交資訊）
+
+### 證券下單交易範例（v4.0）
 
 ```bash
 python order_trading_example.py
@@ -556,6 +679,22 @@ connector = ShioajiConnector(simulation=True)
 
 ## 📝 版本記錄
 
+### v4.1.0 (2025-10-06) - 成交回報與訂單狀態監控
+
+- ✅ 新增 `deal_callbacks` 屬性管理成交回調函數
+- ✅ 新增 `order_update_callbacks` 屬性管理訂單狀態回調
+- ✅ 新增 `deals_history` 屬性記錄成交歷史
+- ✅ 新增 `order_updates` 屬性記錄訂單更新
+- ✅ 實作 `set_order_callback()` 訂單狀態監控
+- ✅ 實作 `set_deal_callback()` 成交回報監控
+- ✅ 實作 `get_deals_history()` 查詢成交歷史
+- ✅ 實作 `get_order_updates()` 查詢訂單更新
+- ✅ 支援多個 callback 同時註冊
+- ✅ 自動記錄所有成交和狀態更新
+- ✅ 完整的錯誤處理與日誌
+- ✅ 更新類別圖加入回報架構
+- ✅ 新增 `deal_event_example.py` 成交回報範例
+
 ### v4.0.0 (2025-10-06) - 證券下單與交易
 
 - ✅ 新增 `order_callbacks` 屬性管理下單回調
@@ -637,5 +776,5 @@ connector = ShioajiConnector(simulation=True)
 ---
 
 **建立日期：** 2025-10-06  
-**版本：** 4.0.0 (證券下單與交易)  
+**版本：** 4.1.0 (成交回報與訂單狀態監控)  
 **作者：** Trading System Team

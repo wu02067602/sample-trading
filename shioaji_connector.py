@@ -3,7 +3,7 @@ Shioaji 交易連線管理模組
 
 此模組提供永豐金證券 Shioaji API 的連線管理功能，
 包含登入、登出、連線狀態管理、商品檔查詢、即時報價訂閱、
-事件回調處理以及證券下單功能。
+事件回調處理、證券下單功能以及成交回報處理。
 
 Author: Trading System Team
 Date: 2025-10-06
@@ -93,6 +93,12 @@ class ShioajiConnector:
         # 下單相關屬性
         self.order_callbacks: Dict[str, List[Callable]] = defaultdict(list)  # {event_type: [callbacks]}
         self.orders_history: List[Dict[str, Any]] = []  # 下單歷史記錄
+        
+        # 成交回報相關屬性
+        self.deal_callbacks: List[Callable] = []  # 成交回調函數列表
+        self.order_update_callbacks: List[Callable] = []  # 訂單狀態更新回調函數列表
+        self.deals_history: List[Dict[str, Any]] = []  # 成交歷史記錄
+        self.order_updates: List[Dict[str, Any]] = []  # 訂單更新記錄
         
         # 設置日誌
         self.logger = logging.getLogger(__name__)
@@ -548,7 +554,9 @@ class ShioajiConnector:
             'contracts_loaded': self.contracts is not None,
             'subscribed_count': len(self.subscribed_contracts),
             'callback_count': sum(len(cbs) for cbs in self.quote_callbacks.values()),
-            'orders_count': len(self.orders_history)
+            'orders_count': len(self.orders_history),
+            'deals_count': len(self.deals_history),
+            'order_updates_count': len(self.order_updates)
         }
     
     def __enter__(self):
@@ -1170,6 +1178,210 @@ class ShioajiConnector:
         except Exception as e:
             self.logger.error(f"查詢委託明細失敗: {str(e)}")
             return []
+    
+    def set_order_callback(self, callback: Callable) -> None:
+        """
+        設定訂單狀態更新回調函數
+        
+        註冊一個回調函數，當訂單狀態更新時會被呼叫。
+        支援多個 callback 函數同時註冊。
+        
+        Args:
+            callback (Callable): 回調函數，接收一個參數：
+                - stat (OrderState): 訂單狀態物件
+                
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當 callback 不是可呼叫的函數時拋出
+            
+        Examples:
+            >>> def order_status_handler(stat):
+            >>>     print(f"訂單狀態更新: {stat.status}")
+            >>>     print(f"訂單編號: {stat.order_id}")
+            >>>     print(f"委託價格: {stat.order.price}")
+            >>>     print(f"委託數量: {stat.order.quantity}")
+            >>>     print(f"已成交數量: {stat.deal_quantity}")
+            >>> 
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_order_callback(order_status_handler)
+            >>> 
+            >>> # 下單後會自動觸發 callback
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> connector.place_order(stock, "Buy", 600.0, 1000)
+            
+        Note:
+            - 訂單狀態包括：已委託、部分成交、全部成交、已取消等
+            - callback 會在訂單狀態改變時被呼叫
+            - 支援註冊多個 callback 函數
+            - callback 應該快速執行，避免阻塞主程序
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if not callable(callback):
+            raise ValueError("callback 必須是可呼叫的函數")
+        
+        # 註冊 callback
+        self.order_update_callbacks.append(callback)
+        
+        # 設定 Shioaji 的 order callback
+        @self.sj.on_order_status()
+        def order_callback(stat):
+            """內部訂單狀態處理函數"""
+            try:
+                # 記錄訂單更新
+                update_info = {
+                    'status': stat.status,
+                    'order_id': stat.order_id,
+                    'order': stat.order,
+                    'deal_quantity': stat.deal_quantity,
+                    'timestamp': datetime.now()
+                }
+                self.order_updates.append(update_info)
+                
+                # 呼叫所有註冊的 callback
+                for cb in self.order_update_callbacks:
+                    try:
+                        cb(stat)
+                    except Exception as e:
+                        self.logger.error(f"執行 order callback 時發生錯誤: {str(e)}")
+            except Exception as e:
+                self.logger.error(f"處理訂單狀態時發生錯誤: {str(e)}")
+        
+        self.logger.info("已註冊訂單狀態更新回調函數")
+    
+    def set_deal_callback(self, callback: Callable) -> None:
+        """
+        設定成交回報回調函數
+        
+        註冊一個回調函數，當訂單成交時會被呼叫。
+        支援多個 callback 函數同時註冊。
+        
+        Args:
+            callback (Callable): 回調函數，接收一個參數：
+                - deal (Deal): 成交回報物件
+                
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當 callback 不是可呼叫的函數時拋出
+            
+        Examples:
+            >>> def deal_handler(deal):
+            >>>     print(f"成交通知: {deal.code}")
+            >>>     print(f"成交價格: {deal.price}")
+            >>>     print(f"成交數量: {deal.quantity}")
+            >>>     print(f"成交時間: {deal.ts}")
+            >>> 
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_deal_callback(deal_handler)
+            >>> 
+            >>> # 下單成交後會自動觸發 callback
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> connector.place_order(stock, "Buy", 600.0, 1000)
+            
+        Note:
+            - 成交回報會在訂單成交時觸發
+            - 部分成交會觸發多次 callback
+            - 支援註冊多個 callback 函數
+            - callback 應該快速執行，避免阻塞主程序
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if not callable(callback):
+            raise ValueError("callback 必須是可呼叫的函數")
+        
+        # 註冊 callback
+        self.deal_callbacks.append(callback)
+        
+        # 設定 Shioaji 的 deal callback
+        @self.sj.on_deal()
+        def deal_callback(deal):
+            """內部成交回報處理函數"""
+            try:
+                # 記錄成交資料
+                deal_info = {
+                    'code': deal.code,
+                    'price': deal.price,
+                    'quantity': deal.quantity,
+                    'ts': deal.ts,
+                    'order_id': deal.order_id,
+                    'seqno': deal.seqno,
+                    'timestamp': datetime.now()
+                }
+                self.deals_history.append(deal_info)
+                
+                # 呼叫所有註冊的 callback
+                for cb in self.deal_callbacks:
+                    try:
+                        cb(deal)
+                    except Exception as e:
+                        self.logger.error(f"執行 deal callback 時發生錯誤: {str(e)}")
+            except Exception as e:
+                self.logger.error(f"處理成交回報時發生錯誤: {str(e)}")
+        
+        self.logger.info("已註冊成交回報回調函數")
+    
+    def get_deals_history(self) -> List[Dict[str, Any]]:
+        """
+        取得成交歷史記錄
+        
+        返回本次連線期間所有的成交記錄。
+        
+        Returns:
+            List[Dict[str, Any]]: 成交歷史列表
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_deal_callback(lambda deal: None)
+            >>> 
+            >>> # 執行一些交易...
+            >>> 
+            >>> deals = connector.get_deals_history()
+            >>> for deal in deals:
+            >>>     print(f"商品: {deal['code']}")
+            >>>     print(f"價格: {deal['price']}")
+            >>>     print(f"數量: {deal['quantity']}")
+            >>>     print(f"時間: {deal['ts']}")
+            
+        Note:
+            - 只記錄本次連線期間的成交
+            - 需要先註冊 deal callback 才會記錄
+            - 登出後歷史記錄會被清除
+        """
+        return self.deals_history.copy()
+    
+    def get_order_updates(self) -> List[Dict[str, Any]]:
+        """
+        取得訂單更新記錄
+        
+        返回本次連線期間所有的訂單狀態更新記錄。
+        
+        Returns:
+            List[Dict[str, Any]]: 訂單更新列表
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_order_callback(lambda stat: None)
+            >>> 
+            >>> # 執行一些交易...
+            >>> 
+            >>> updates = connector.get_order_updates()
+            >>> for update in updates:
+            >>>     print(f"訂單編號: {update['order_id']}")
+            >>>     print(f"狀態: {update['status']}")
+            >>>     print(f"已成交數量: {update['deal_quantity']}")
+            
+        Note:
+            - 只記錄本次連線期間的更新
+            - 需要先註冊 order callback 才會記錄
+            - 登出後歷史記錄會被清除
+        """
+        return self.order_updates.copy()
     
     def get_orders_history(self) -> List[Dict[str, Any]]:
         """
