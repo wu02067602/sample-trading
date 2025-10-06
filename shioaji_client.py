@@ -21,6 +21,7 @@ class ShioajiClient(ITradingClient):
     Attributes:
         sj (Optional[sj.Shioaji]): Shioaji API 實例
         is_logged_in (bool): 登入狀態標記
+        contract (Optional[Any]): 商品檔資料
     
     Examples:
         >>> config = LoginConfig(
@@ -56,6 +57,7 @@ class ShioajiClient(ITradingClient):
         """
         self.sj: Optional[sj.Shioaji] = None
         self.is_logged_in: bool = False
+        self.contract: Optional[Any] = None
         self._validator: IConfigValidator = validator or LoginConfigValidator()
     
     def login(self, config: LoginConfig) -> Dict[str, Any]:
@@ -258,3 +260,93 @@ class ShioajiClient(ITradingClient):
             raise RuntimeError("尚未登入，請先執行 login() 方法")
         
         return self.sj.list_accounts()
+    
+    def fetch_contracts(self) -> Dict[str, Any]:
+        """
+        取得商品檔
+        
+        從 Shioaji API 載入商品檔資料並儲存至 contract 屬性。
+        必須在登入後才能執行此操作。
+        
+        Returns:
+            Dict[str, Any]: 商品檔取得結果字典，包含以下鍵值：
+                - success (bool): 取得是否成功
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入 ...
+            >>> result = client.fetch_contracts()
+            >>> if result["success"]:
+            ...     print("商品檔載入成功")
+            ...     stocks = client.get_contracts("Stocks")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            Exception: 其他取得商品檔過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            # 取得商品檔
+            self.contract = self.sj.Contracts
+            
+            return {
+                "success": True,
+                "message": "商品檔載入成功"
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "商品檔載入失敗",
+                "error": str(e)
+            }
+        except Exception as e:
+            error_msg = f"商品檔載入過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "商品檔載入失敗",
+                "error": error_msg
+            }
+    
+    def get_contracts(self, contract_type: Optional[str] = None) -> Optional[Any]:
+        """
+        取得已載入的商品檔資料
+        
+        返回已載入的商品檔資料。可以指定商品類型來取得特定類型的商品，
+        如股票、期貨、選擇權等。
+        
+        Args:
+            contract_type (Optional[str]): 商品類型，可選值包括：
+                - 'Stocks': 股票
+                - 'Futures': 期貨
+                - 'Options': 選擇權
+                - None: 返回所有商品檔
+        
+        Returns:
+            Optional[Any]: 商品檔物件，如果尚未載入則返回 None
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和 fetch_contracts ...
+            >>> all_contracts = client.get_contracts()
+            >>> stocks = client.get_contracts("Stocks")
+            >>> futures = client.get_contracts("Futures")
+        
+        Raises:
+            RuntimeError: 當嘗試在未載入商品檔的狀態下取得商品資訊時
+            AttributeError: 當指定的商品類型不存在時
+        """
+        if self.contract is None:
+            raise RuntimeError("尚未載入商品檔，請先執行 fetch_contracts() 方法")
+        
+        if contract_type is None:
+            return self.contract
+        
+        try:
+            return getattr(self.contract, contract_type)
+        except AttributeError:
+            raise AttributeError(f"商品類型 '{contract_type}' 不存在")

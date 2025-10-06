@@ -93,6 +93,35 @@ class ITradingClient(ABC):
             NotImplementedError: 子類別必須實作此方法
         """
         pass
+    
+    @abstractmethod
+    def fetch_contracts(self) -> Dict[str, Any]:
+        """
+        取得商品檔
+        
+        Returns:
+            Dict[str, Any]: 商品檔取得結果字典，包含 success、message 等鍵值
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def get_contracts(self, contract_type: Optional[str] = None) -> Optional[Any]:
+        """
+        取得已載入的商品檔資料
+        
+        Args:
+            contract_type (Optional[str]): 商品類型，如 'Stocks', 'Futures' 等
+        
+        Returns:
+            Optional[Any]: 商品檔物件
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
 
 
 class IConfigValidator(ABC):

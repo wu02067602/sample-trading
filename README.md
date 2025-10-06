@@ -56,6 +56,14 @@ result = client.login(config)
 
 if result["success"]:
     print("登入成功")
+    
+    # 取得商品檔
+    contract_result = client.fetch_contracts()
+    if contract_result["success"]:
+        # 取得股票商品
+        stocks = client.get_contracts("Stocks")
+        print(f"股票商品數量: {len(stocks)}")
+    
     # 取得帳戶資訊
     accounts = client.get_accounts()
     print(accounts)
@@ -63,6 +71,31 @@ if result["success"]:
     client.logout()
 else:
     print(f"登入失敗: {result['error']}")
+```
+
+### 取得商品檔
+
+```python
+# 先登入
+client = ShioajiClient()
+client.login(config)
+
+# 取得商品檔
+contract_result = client.fetch_contracts()
+if contract_result["success"]:
+    print("商品檔載入成功")
+    
+    # 取得所有商品
+    all_contracts = client.get_contracts()
+    
+    # 取得股票商品
+    stocks = client.get_contracts("Stocks")
+    
+    # 取得期貨商品
+    futures = client.get_contracts("Futures")
+    
+    # 取得選擇權商品
+    options = client.get_contracts("Options")
 ```
 
 ### 啟用憑證（用於下單）
@@ -134,6 +167,8 @@ client = ShioajiClient(validator=custom_validator)
 - `logout() -> Dict[str, Any]`: 執行登出
 - `activate_ca(ca_password: str) -> Dict[str, Any]`: 啟用憑證
 - `get_accounts() -> Optional[Any]`: 取得帳戶資訊
+- `fetch_contracts() -> Dict[str, Any]`: 取得商品檔
+- `get_contracts(contract_type: Optional[str]) -> Optional[Any]`: 取得已載入的商品檔資料
 
 ## 錯誤處理
 
