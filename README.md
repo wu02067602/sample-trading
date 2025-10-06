@@ -16,6 +16,7 @@
 - ✅ 股票下單功能（整股與零股）
 - ✅ 成交回報查詢功能
 - ✅ 持倉與損益查詢功能
+- ✅ 委託回報記錄與管理功能
 
 ## 安裝
 
@@ -198,7 +199,30 @@ pnl = trader.list_profit_loss()
 margin = trader.get_account_margin()
 ```
 
-### 9. 登出系統
+### 9. 委託回報記錄
+
+```python
+# 啟用委託回報記錄功能
+trader.enable_order_report_recording()
+
+# 取得委託回報記錄
+order_reports = trader.get_order_reports()
+deal_reports = trader.get_deal_reports()
+
+# 取得最新幾筆回報
+recent_orders = trader.get_order_reports(limit=10)
+recent_deals = trader.get_deal_reports(limit=5)
+
+# 取得回報摘要
+summary = trader.get_report_summary()
+print(f"委託回報數: {summary['order_count']}")
+print(f"成交回報數: {summary['deal_count']}")
+
+# 清除歷史記錄
+trader.clear_report_history()
+```
+
+### 10. 登出系統
 
 ```python
 trader.logout()
@@ -227,6 +251,7 @@ trader.logout()
 - `example_quote_callback.py` - 報價訂閱與 Callback 監控範例
 - `example_order.py` - 股票下單範例（整股與零股下單）
 - `example_trade_status.py` - 成交回報查詢範例（委託狀態、持倉、損益查詢）
+- `example_order_report.py` - 委託回報記錄範例（即時記錄與管理委託回報）
 - `example_complete.py` - 完整功能示範（整合所有功能的交易機器人範例）
 
 ## 授權

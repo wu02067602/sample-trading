@@ -44,6 +44,8 @@ class ShioajiTrader:
         self._subscribed_contracts: List = []  # 記錄已訂閱的商品
         self._quote_callback: Optional[Callable] = None  # 報價 callback
         self._order_callback: Optional[Callable] = None  # 委託 callback
+        self._order_reports: List[Dict[str, Any]] = []  # 儲存委託回報歷史
+        self._deal_reports: List[Dict[str, Any]] = []  # 儲存成交回報歷史
     
     def login(
         self,
@@ -1102,3 +1104,157 @@ class ShioajiTrader:
         except Exception as e:
             print(f"查詢帳戶額度失敗：{str(e)}")
             return {}
+    
+    def enable_order_report_recording(self):
+        """啟用委託回報記錄功能
+        
+        啟用後會自動記錄所有的委託回報與成交回報。
+        委託回報會儲存在 _order_reports 中，成交回報會儲存在 _deal_reports 中。
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> 
+            >>> # 啟用回報記錄
+            >>> trader.enable_order_report_recording()
+            >>> 
+            >>> # 下單後會自動記錄回報
+            >>> trade = trader.buy_stock("2330", price=500.0, quantity=1000)
+            >>> 
+            >>> # 查詢記錄的回報
+            >>> reports = trader.get_order_reports()
+            >>> for report in reports:
+            ...     print(report)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        # 設定委託回報 callback 來記錄回報
+        @self.sj.on_order_callback
+        def order_report_handler(stat, msg):
+            # 記錄委託回報
+            report = {
+                'timestamp': time.time(),
+                'stat': str(stat),
+                'msg': msg,
+                'type': 'order' if 'Order' in str(stat) else 'deal'
+            }
+            
+            # 根據類型分類儲存
+            if report['type'] == 'order':
+                self._order_reports.append(report)
+            else:
+                self._deal_reports.append(report)
+            
+            # 如果用戶有設定 callback，也呼叫用戶的 callback
+            if self._order_callback:
+                self._order_callback(stat, msg)
+        
+        print("✓ 委託回報記錄功能已啟用")
+    
+    def get_order_reports(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """取得委託回報記錄
+        
+        取得已記錄的委託回報，按時間順序排列（最新的在最後）。
+        
+        Args:
+            limit: 限制回傳的筆數，若為 None 則回傳全部
+            
+        Returns:
+            List: 委託回報列表
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> trader.enable_order_report_recording()
+            >>> 
+            >>> # 取得所有委託回報
+            >>> reports = trader.get_order_reports()
+            >>> 
+            >>> # 取得最新 10 筆委託回報
+            >>> recent_reports = trader.get_order_reports(limit=10)
+        """
+        if limit:
+            return self._order_reports[-limit:]
+        return self._order_reports.copy()
+    
+    def get_deal_reports(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """取得成交回報記錄
+        
+        取得已記錄的成交回報，按時間順序排列（最新的在最後）。
+        
+        Args:
+            limit: 限制回傳的筆數，若為 None 則回傳全部
+            
+        Returns:
+            List: 成交回報列表
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> trader.enable_order_report_recording()
+            >>> 
+            >>> # 取得所有成交回報
+            >>> deals = trader.get_deal_reports()
+            >>> 
+            >>> # 取得最新 5 筆成交回報
+            >>> recent_deals = trader.get_deal_reports(limit=5)
+        """
+        if limit:
+            return self._deal_reports[-limit:]
+        return self._deal_reports.copy()
+    
+    def clear_report_history(self):
+        """清除委託回報歷史記錄
+        
+        清除所有已記錄的委託回報與成交回報。
+        
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> trader.enable_order_report_recording()
+            >>> 
+            >>> # 清除歷史記錄
+            >>> trader.clear_report_history()
+        """
+        self._order_reports.clear()
+        self._deal_reports.clear()
+        print("✓ 委託回報歷史記錄已清除")
+    
+    def get_report_summary(self) -> Dict[str, Any]:
+        """取得委託回報摘要
+        
+        取得委託回報的統計摘要資訊。
+        
+        Returns:
+            Dict: 包含統計資訊的字典
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> trader.enable_order_report_recording()
+            >>> 
+            >>> # 取得回報摘要
+            >>> summary = trader.get_report_summary()
+            >>> print(f"委託回報數: {summary['order_count']}")
+            >>> print(f"成交回報數: {summary['deal_count']}")
+        """
+        summary = {
+            'order_count': len(self._order_reports),
+            'deal_count': len(self._deal_reports),
+            'total_count': len(self._order_reports) + len(self._deal_reports),
+            'first_report_time': None,
+            'last_report_time': None
+        }
+        
+        # 取得最早和最晚的回報時間
+        all_reports = self._order_reports + self._deal_reports
+        if all_reports:
+            timestamps = [r['timestamp'] for r in all_reports]
+            summary['first_report_time'] = min(timestamps)
+            summary['last_report_time'] = max(timestamps)
+        
+        return summary
