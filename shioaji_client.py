@@ -5,11 +5,12 @@ Shioaji 交易客戶端模組
 """
 
 import shioaji as sj
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass
 import logging
 
 from trading_interface import ITradingClient, IConfigValidator
+from quote_callback import IQuoteCallback, IOrderCallback, DefaultQuoteCallback, DefaultOrderCallback
 
 
 @dataclass
@@ -111,6 +112,13 @@ class ShioajiClient(ITradingClient):
         self.config: Optional[LoginConfig] = None
         self.contracts: Optional[Any] = None
         self.logger = logging.getLogger(__name__)
+        
+        # Callback 處理器
+        self.quote_callback: Optional[IQuoteCallback] = None
+        self.order_callback: Optional[IOrderCallback] = None
+        
+        # 訂閱列表
+        self.subscribed_quotes: List[str] = []
         
     def connect(self, config: LoginConfig) -> bool:
         """
@@ -268,6 +276,7 @@ class ShioajiClient(ITradingClient):
             self.is_logged_in = False
             self.sj = None
             self.contracts = None
+            self.subscribed_quotes = []
             
             self.logger.info("登出成功")
             return result
@@ -474,3 +483,245 @@ class ShioajiClient(ITradingClient):
         except Exception as e:
             self.logger.error(f"取得股票時發生錯誤: {e}")
             raise RuntimeError(f"取得股票失敗: {e}") from e
+    
+    def set_quote_callback(self, callback: IQuoteCallback) -> None:
+        """
+        設定報價 Callback 處理器
+        
+        Args:
+            callback: 實作 IQuoteCallback 介面的回調處理器
+        
+        Examples:
+            >>> from quote_callback import DefaultQuoteCallback
+            >>> client = ShioajiClient()
+            >>> client.login(config)
+            >>> callback = DefaultQuoteCallback()
+            >>> client.set_quote_callback(callback)
+        """
+        self.quote_callback = callback
+        self.logger.info("已設定報價 Callback 處理器")
+    
+    def set_order_callback(self, callback: IOrderCallback) -> None:
+        """
+        設定訂單 Callback 處理器
+        
+        Args:
+            callback: 實作 IOrderCallback 介面的回調處理器
+        
+        Examples:
+            >>> from quote_callback import DefaultOrderCallback
+            >>> client = ShioajiClient()
+            >>> client.login(config)
+            >>> callback = DefaultOrderCallback()
+            >>> client.set_order_callback(callback)
+        """
+        self.order_callback = callback
+        self.logger.info("已設定訂單 Callback 處理器")
+    
+    def subscribe_quote(self, contract: Any) -> bool:
+        """
+        訂閱報價
+        
+        訂閱指定商品的即時報價，需要先設定 Callback 處理器。
+        
+        Args:
+            contract: 商品物件（從 Contracts 取得）
+        
+        Returns:
+            bool: 訂閱成功返回 True，失敗返回 False
+        
+        Raises:
+            RuntimeError: 當尚未登入或未設定 Callback 時
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> client.login(config)
+            >>> 
+            >>> # 設定並註冊 callback
+            >>> callback = DefaultQuoteCallback()
+            >>> client.set_quote_callback(callback)
+            >>> client.register_quote_callback()  # 註冊 callback
+            >>> 
+            >>> # 訂閱台積電報價
+            >>> tsmc = client.get_stock("2330")
+            >>> client.subscribe_quote(tsmc)
+            >>> 
+            >>> # 或直接使用 contracts
+            >>> client.subscribe_quote(client.contracts.Stocks["2330"])
+        """
+        if not self.is_logged_in or self.sj is None:
+            raise RuntimeError("尚未登入，無法訂閱報價")
+        
+        if not self.quote_callback:
+            raise RuntimeError("尚未設定報價 Callback，請先調用 set_quote_callback()")
+        
+        try:
+            # 執行訂閱
+            self.sj.quote.subscribe(
+                self.sj.Contracts.Stocks[contract.code],
+                quote_type=sj.constant.QuoteType.Tick,
+                version=sj.constant.QuoteVersion.v1
+            )
+            
+            # 記錄訂閱
+            if contract.code not in self.subscribed_quotes:
+                self.subscribed_quotes.append(contract.code)
+            
+            self.logger.info(f"訂閱報價成功: {contract.code} - {contract.name}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"訂閱報價時發生錯誤: {e}")
+            raise RuntimeError(f"訂閱報價失敗: {e}") from e
+    
+    def unsubscribe_quote(self, contract: Any) -> bool:
+        """
+        取消訂閱報價
+        
+        Args:
+            contract: 商品物件
+        
+        Returns:
+            bool: 取消訂閱成功返回 True
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+        
+        Examples:
+            >>> tsmc = client.get_stock("2330")
+            >>> client.unsubscribe_quote(tsmc)
+        """
+        if not self.is_logged_in or self.sj is None:
+            raise RuntimeError("尚未登入，無法取消訂閱")
+        
+        try:
+            self.sj.quote.unsubscribe(
+                self.sj.Contracts.Stocks[contract.code],
+                quote_type=sj.constant.QuoteType.Tick,
+                version=sj.constant.QuoteVersion.v1
+            )
+            
+            # 移除訂閱記錄
+            if contract.code in self.subscribed_quotes:
+                self.subscribed_quotes.remove(contract.code)
+            
+            self.logger.info(f"取消訂閱成功: {contract.code}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"取消訂閱時發生錯誤: {e}")
+            raise RuntimeError(f"取消訂閱失敗: {e}") from e
+    
+    def register_quote_callback(self) -> bool:
+        """
+        註冊報價回調
+        
+        註冊報價 callback，必須在訂閱報價之前調用。
+        
+        Returns:
+            bool: 註冊成功返回 True
+        
+        Raises:
+            RuntimeError: 當尚未登入或未設定 Callback 時
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> client.login(config)
+            >>> 
+            >>> # 設定 callback
+            >>> callback = DefaultQuoteCallback()
+            >>> client.set_quote_callback(callback)
+            >>> 
+            >>> # 註冊回調
+            >>> client.register_quote_callback()
+            >>> 
+            >>> # 現在可以訂閱報價
+            >>> tsmc = client.get_stock("2330")
+            >>> client.subscribe_quote(tsmc)
+        """
+        if not self.is_logged_in or self.sj is None:
+            raise RuntimeError("尚未登入，無法註冊報價回調")
+        
+        if not self.quote_callback:
+            raise RuntimeError("尚未設定報價 Callback，請先調用 set_quote_callback()")
+        
+        try:
+            # 註冊報價回調
+            @self.sj.on_quote_stk_v1()
+            def quote_callback_wrapper(topic: str, quote: Any):
+                """內部報價回調包裝函數"""
+                if self.quote_callback:
+                    self.quote_callback.on_quote(topic, quote)
+            
+            self.logger.info("報價回調註冊成功")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"註冊報價回調時發生錯誤: {e}")
+            raise RuntimeError(f"註冊報價回調失敗: {e}") from e
+    
+    def register_order_callback(self) -> bool:
+        """
+        註冊訂單回調
+        
+        註冊訂單狀態和成交事件的回調處理，需要先設定 Callback 處理器。
+        
+        Returns:
+            bool: 註冊成功返回 True
+        
+        Raises:
+            RuntimeError: 當尚未登入或未設定 Callback 時
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> client.login(config)
+            >>> 
+            >>> # 設定 callback
+            >>> callback = DefaultOrderCallback()
+            >>> client.set_order_callback(callback)
+            >>> 
+            >>> # 註冊回調
+            >>> client.register_order_callback()
+        """
+        if not self.is_logged_in or self.sj is None:
+            raise RuntimeError("尚未登入，無法註冊訂單回調")
+        
+        if not self.order_callback:
+            raise RuntimeError("尚未設定訂單 Callback，請先調用 set_order_callback()")
+        
+        try:
+            # 註冊訂單狀態回調
+            @self.sj.on_order()
+            def order_callback_wrapper(stat: str, order: Any):
+                """內部訂單回調包裝函數"""
+                if self.order_callback:
+                    self.order_callback.on_order(stat, order)
+            
+            # 註冊成交回調
+            @self.sj.on_deal()
+            def deal_callback_wrapper(stat: str, deal: Any):
+                """內部成交回調包裝函數"""
+                if self.order_callback:
+                    self.order_callback.on_deal(stat, deal)
+            
+            self.logger.info("訂單回調註冊成功")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"註冊訂單回調時發生錯誤: {e}")
+            raise RuntimeError(f"註冊訂單回調失敗: {e}") from e
+    
+    def get_subscribed_quotes(self) -> List[str]:
+        """
+        取得已訂閱的商品列表
+        
+        Returns:
+            List[str]: 已訂閱的商品代碼列表
+        
+        Examples:
+            >>> client.subscribe_quote(tsmc)
+            >>> client.subscribe_quote(hon_hai)
+            >>> subscribed = client.get_subscribed_quotes()
+            >>> print(subscribed)  # ['2330', '2317']
+        """
+        return self.subscribed_quotes.copy()

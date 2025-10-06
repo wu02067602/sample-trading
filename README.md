@@ -55,6 +55,14 @@ results = client.search_contracts("台積")
 for contract in results:
     print(f"{contract.code} - {contract.name}")
 
+# 訂閱報價
+from quote_callback import DefaultQuoteCallback
+
+callback = DefaultQuoteCallback()
+client.set_quote_callback(callback)
+client.register_quote_callback()
+client.subscribe_quote(tsmc)
+
 # 登出
 client.logout()
 ```
@@ -93,16 +101,22 @@ client.login(config)
 
 ```
 /workspace/
-├── trading_interface.py       # 抽象介面定義 (ITradingClient, IConfigValidator)
-├── shioaji_client.py          # Shioaji 客戶端實作
-├── test_shioaji_client.py     # 單元測試
-├── example_usage.py           # 登入使用範例
-├── example_contracts.py       # 商品檔使用範例
-├── requirements.txt           # 專案依賴
-├── 類別圖.md                   # Mermaid 類別圖文檔
-├── REFACTORING_SUMMARY.md     # 重構總結報告
-├── SOLID_REVIEW.md            # SOLID 原則檢查報告
-└── README.md                  # 本文件
+├── trading_interface.py           # 抽象介面定義 (ITradingClient, IConfigValidator)
+├── quote_callback.py              # Callback 介面定義 (IQuoteCallback, IOrderCallback)
+├── shioaji_client.py              # Shioaji 客戶端實作
+├── test_shioaji_client.py         # 單元測試
+├── example_usage.py               # 登入使用範例
+├── example_contracts.py           # 商品檔使用範例
+├── example_quote_subscribe.py     # 報價訂閱與 Callback 範例
+├── requirements.txt               # 專案依賴
+├── 類別圖.md                       # Mermaid 類別圖文檔
+├── REFACTORING_SUMMARY.md         # 重構總結報告
+├── SOLID_REVIEW.md                # SOLID 檢查（商品檔功能）
+├── SOLID_REVIEW_QUOTE.md          # SOLID 檢查（報價訂閱功能）
+├── PROJECT_COMPLETION_SUMMARY.md  # 完成報告（商品檔功能）
+├── PROJECT_COMPLETION_QUOTE.md    # 完成報告（報價訂閱功能）
+├── FINAL_SUMMARY.md               # 專案最終總結
+└── README.md                      # 本文件
 ```
 
 ## 架構設計
@@ -157,8 +171,46 @@ Shioaji 交易客戶端，實作 `ITradingClient` 介面。
 - `get_accounts() -> Dict[str, Any]`: 取得帳戶資訊
 - `is_connected() -> bool`: 檢查連線狀態
 - `get_contracts() -> Any`: 取得商品檔資訊
-- `search_contracts(keyword: str) -> list`: 搜尋商品檔
-- `get_stock(code: str) -> Any`: 取得特定股票商品
+
+### IQuoteCallback (介面)
+
+報價回調處理介面。
+
+**方法**:
+- `on_quote(topic: str, quote: Any) -> None`: 處理報價回調
+
+### IOrderCallback (介面)
+
+訂單回調處理介面。
+
+**方法**:
+- `on_order(stat: str, order: Any) -> None`: 處理訂單狀態回調
+- `on_deal(stat: str, deal: Any) -> None`: 處理成交回調
+
+### DefaultQuoteCallback
+
+預設報價回調實作，實作 `IQuoteCallback` 介面。
+
+**屬性**:
+- `custom_handler` (Optional[Callable]): 自訂處理函數
+- `quote_count` (int): 報價接收計數
+
+**方法**:
+- `on_quote(topic: str, quote: Any) -> None`: 處理報價回調
+
+### DefaultOrderCallback
+
+預設訂單回調實作，實作 `IOrderCallback` 介面。
+
+**屬性**:
+- `order_handler` (Optional[Callable]): 訂單自訂處理函數
+- `deal_handler` (Optional[Callable]): 成交自訂處理函數
+- `order_count` (int): 訂單接收計數
+- `deal_count` (int): 成交接收計數
+
+**方法**:
+- `on_order(stat: str, order: Any) -> None`: 處理訂單狀態回調
+- `on_deal(stat: str, deal: Any) -> None`: 處理成交回調
 
 ### ITradingClient (介面)
 
@@ -187,6 +239,8 @@ python3 test_shioaji_client.py
 - ✅ 商品檔取得測試
 - ✅ 商品檔搜尋測試
 - ✅ 股票查詢測試
+- ✅ 報價訂閱測試
+- ✅ Callback 處理測試
 - ✅ Context Manager 測試
 - ✅ 錯誤處理測試
 
@@ -196,8 +250,10 @@ python3 test_shioaji_client.py
 
 1. **Facade Pattern (外觀模式)**: `ShioajiClient` 提供簡化的介面封裝 Shioaji SDK
 2. **Adapter Pattern (適配器模式)**: 將 Shioaji SDK 適配到 `ITradingClient` 介面
-3. **Strategy Pattern (策略模式)**: 通過介面實現可替換的交易策略
-4. **Context Manager Pattern**: 支援 `with` 語句的資源管理
+3. **Strategy Pattern (策略模式)**: Callback 處理器可替換策略
+4. **Observer Pattern (觀察者模式)**: 報價訂閱和事件通知機制
+5. **Template Method Pattern**: 預設 Callback 提供基本行為和擴展點
+6. **Context Manager Pattern**: 支援 `with` 語句的資源管理
 
 ## 擴展性
 
