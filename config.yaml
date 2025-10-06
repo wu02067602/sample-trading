@@ -1,0 +1,14 @@
+# 永丰 API 登录配置文件
+# 请根据您的实际信息填写以下配置
+
+# 身份证字号
+person_id: "A123456789"
+
+# API Key
+api_key: "your_api_key_here"
+
+# API Secret
+api_secret: "your_api_secret_here"
+
+# 凭证路径（可选）
+ca_path: "/path/to/certificate"
