@@ -9,6 +9,14 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 
 
+# 前向聲明，避免循環導入
+try:
+    from order_manager import OrderConfig, IntradayOddOrderConfig
+except ImportError:
+    OrderConfig = Any
+    IntradayOddOrderConfig = Any
+
+
 @dataclass
 class LoginConfig:
     """
@@ -149,6 +157,72 @@ class ITradingClient(ABC):
         
         Returns:
             Dict[str, Any]: 取消訂閱結果字典
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def place_order(self, order_config: Any) -> Dict[str, Any]:
+        """
+        下一般股票訂單
+        
+        Args:
+            order_config (OrderConfig): 訂單配置物件
+        
+        Returns:
+            Dict[str, Any]: 下單結果字典
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def place_intraday_odd_order(self, order_config: Any) -> Dict[str, Any]:
+        """
+        下盤中零股訂單
+        
+        Args:
+            order_config (IntradayOddOrderConfig): 盤中零股訂單配置物件
+        
+        Returns:
+            Dict[str, Any]: 下單結果字典
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """
+        取消訂單
+        
+        Args:
+            order_id (str): 訂單 ID
+        
+        Returns:
+            Dict[str, Any]: 取消訂單結果字典
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def update_order(self, order_id: str, price: float, quantity: int) -> Dict[str, Any]:
+        """
+        修改訂單
+        
+        Args:
+            order_id (str): 訂單 ID
+            price (float): 新價格
+            quantity (int): 新數量
+        
+        Returns:
+            Dict[str, Any]: 修改訂單結果字典
         
         Raises:
             NotImplementedError: 子類別必須實作此方法

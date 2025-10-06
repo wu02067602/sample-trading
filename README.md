@@ -23,6 +23,7 @@
 ├── trading_client_interface.py   # 交易客戶端抽象介面
 ├── config_validator.py            # 配置驗證器實作
 ├── quote_callback_handler.py     # 報價與委託成交回調處理器
+├── order_manager.py               # 訂單管理與驗證模組
 └── shioaji_client.py             # 永豐 Shioaji 客戶端實作
 ```
 
@@ -138,6 +139,46 @@ print(f"最新報價: {latest_quote}")
 client.unsubscribe_quote([tsmc])
 ```
 
+### 下單功能
+
+```python
+from order_manager import OrderConfig, OrderAction, OrderPriceType, IntradayOddOrderConfig
+
+# 先登入並啟用憑證
+client = ShioajiClient()
+client.login(config)
+ca_result = client.activate_ca("YOUR_CA_PASSWORD")
+
+if ca_result["success"]:
+    # 取得商品
+    client.fetch_contracts()
+    stocks = client.get_contracts("Stocks")
+    tsmc = stocks["2330"]
+    
+    # 下一般股票訂單（1000股的倍數）
+    order_config = OrderConfig(
+        contract=tsmc,
+        action=OrderAction.BUY,
+        price=100.0,
+        quantity=1000,
+        price_type=OrderPriceType.LIMIT
+    )
+    result = client.place_order(order_config)
+    if result["success"]:
+        print(f"下單成功：{result['order']}")
+    
+    # 下盤中零股訂單（小於1000股）
+    odd_config = IntradayOddOrderConfig(
+        contract=tsmc,
+        action=OrderAction.BUY,
+        price=100.0,
+        quantity=100
+    )
+    odd_result = client.place_intraday_odd_order(odd_config)
+    if odd_result["success"]:
+        print("零股下單成功")
+```
+
 ### 啟用憑證（用於下單）
 
 ```python
@@ -212,6 +253,34 @@ client = ShioajiClient(validator=custom_validator)
 - `subscribe_quote(contracts: List[Any]) -> Dict[str, Any]`: 訂閱報價
 - `unsubscribe_quote(contracts: List[Any]) -> Dict[str, Any]`: 取消訂閱報價
 - `set_order_callback() -> Dict[str, Any]`: 設置委託成交回調
+- `place_order(order_config: OrderConfig) -> Dict[str, Any]`: 下一般股票訂單
+- `place_intraday_odd_order(order_config: IntradayOddOrderConfig) -> Dict[str, Any]`: 下盤中零股訂單
+- `cancel_order(order_id: str) -> Dict[str, Any]`: 取消訂單
+- `update_order(order_id: str, price: float, quantity: int) -> Dict[str, Any]`: 修改訂單
+
+### OrderConfig
+
+訂單配置資料類別
+
+**屬性**：
+- `contract`: 商品合約物件
+- `action`: 買賣方向（OrderAction.BUY/SELL）
+- `price`: 價格
+- `quantity`: 數量（必須為1000股的倍數）
+- `price_type`: 價格類型（OrderPriceType.LIMIT/MARKET）
+- `order_type`: 訂單類型（OrderType.ROD/IOC/FOK）
+- `account`: 交易帳戶（可選）
+
+### IntradayOddOrderConfig
+
+盤中零股訂單配置資料類別
+
+**屬性**：
+- `contract`: 商品合約物件
+- `action`: 買賣方向
+- `price`: 價格
+- `quantity`: 數量（必須小於1000股）
+- `account`: 交易帳戶（可選）
 
 ### QuoteCallbackHandler
 

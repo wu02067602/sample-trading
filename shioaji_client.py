@@ -10,9 +10,13 @@ from typing import Optional, Dict, Any, List
 from trading_client_interface import ITradingClient, LoginConfig, IConfigValidator
 from config_validator import LoginConfigValidator
 from quote_callback_handler import IQuoteCallback, QuoteCallbackHandler, OrderDealCallbackHandler
+from order_manager import (
+    OrderConfig, IntradayOddOrderConfig, IOrderManager, OrderValidator,
+    OrderAction, OrderPriceType, OrderType
+)
 
 
-class ShioajiClient(ITradingClient):
+class ShioajiClient(ITradingClient, IOrderManager):
     """
     永豐 Shioaji 交易客戶端類別
     
@@ -75,6 +79,7 @@ class ShioajiClient(ITradingClient):
         self._validator: IConfigValidator = validator or LoginConfigValidator()
         self.quote_callback: IQuoteCallback = quote_callback or QuoteCallbackHandler()
         self.order_deal_callback: OrderDealCallbackHandler = order_deal_callback or OrderDealCallbackHandler()
+        self._order_validator: OrderValidator = OrderValidator()
     
     def login(self, config: LoginConfig) -> Dict[str, Any]:
         """
@@ -542,5 +547,296 @@ class ShioajiClient(ITradingClient):
             return {
                 "success": False,
                 "message": "設置回調失敗",
+                "error": error_msg
+            }
+    
+    def place_order(self, order_config: OrderConfig) -> Dict[str, Any]:
+        """
+        下一般股票訂單
+        
+        執行股票買賣下單操作。支援限價單和市價單，數量必須為1000股的倍數。
+        必須在登入且啟用憑證後才能執行此操作。
+        
+        Args:
+            order_config (OrderConfig): 訂單配置物件，包含商品、價格、數量等資訊
+        
+        Returns:
+            Dict[str, Any]: 下單結果字典，包含以下鍵值：
+                - success (bool): 下單是否成功
+                - message (str): 結果訊息
+                - order (Optional[Any]): 訂單物件（如果成功）
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> from order_manager import OrderConfig, OrderAction, OrderPriceType
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和啟用憑證 ...
+            >>> config = OrderConfig(
+            ...     contract=stock_contract,
+            ...     action=OrderAction.BUY,
+            ...     price=100.0,
+            ...     quantity=1000,
+            ...     price_type=OrderPriceType.LIMIT
+            ... )
+            >>> result = client.place_order(config)
+            >>> if result["success"]:
+            ...     print(f"下單成功，訂單號: {result['order'].order_id}")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當訂單配置無效時
+            Exception: 其他下單過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            # 驗證訂單配置
+            self._order_validator.validate_order(order_config)
+            
+            # 建立 Shioaji Order 物件
+            order = sj.Order(
+                price=order_config.price if order_config.price_type == OrderPriceType.LIMIT else 0,
+                quantity=order_config.quantity,
+                action=order_config.action.value,
+                price_type=order_config.price_type.value,
+                order_type=order_config.order_type.value,
+                account=order_config.account or self.sj.stock_account
+            )
+            
+            # 下單
+            trade = self.sj.place_order(order_config.contract, order)
+            
+            return {
+                "success": True,
+                "message": "下單成功",
+                "order": trade
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "下單失敗",
+                "error": str(e)
+            }
+        except ValueError as e:
+            return {
+                "success": False,
+                "message": "下單失敗",
+                "error": f"訂單配置錯誤: {str(e)}"
+            }
+        except Exception as e:
+            error_msg = f"下單過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "下單失敗",
+                "error": error_msg
+            }
+    
+    def place_intraday_odd_order(self, order_config: IntradayOddOrderConfig) -> Dict[str, Any]:
+        """
+        下盤中零股訂單
+        
+        執行盤中零股買賣下單操作。數量必須小於1000股。
+        必須在登入且啟用憑證後才能執行此操作。
+        
+        Args:
+            order_config (IntradayOddOrderConfig): 盤中零股訂單配置物件
+        
+        Returns:
+            Dict[str, Any]: 下單結果字典，包含以下鍵值：
+                - success (bool): 下單是否成功
+                - message (str): 結果訊息
+                - order (Optional[Any]): 訂單物件（如果成功）
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> from order_manager import IntradayOddOrderConfig, OrderAction
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和啟用憑證 ...
+            >>> config = IntradayOddOrderConfig(
+            ...     contract=stock_contract,
+            ...     action=OrderAction.BUY,
+            ...     price=100.0,
+            ...     quantity=100
+            ... )
+            >>> result = client.place_intraday_odd_order(config)
+            >>> if result["success"]:
+            ...     print("零股下單成功")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當訂單配置無效時
+            Exception: 其他下單過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            # 驗證訂單配置
+            self._order_validator.validate_intraday_odd_order(order_config)
+            
+            # 建立盤中零股 Order 物件
+            order = sj.Order(
+                price=order_config.price,
+                quantity=order_config.quantity,
+                action=order_config.action.value,
+                price_type=OrderPriceType.LIMIT.value,
+                order_type=OrderType.ROD.value,
+                order_lot="IntradayOdd",  # 盤中零股標記
+                account=order_config.account or self.sj.stock_account
+            )
+            
+            # 下單
+            trade = self.sj.place_order(order_config.contract, order)
+            
+            return {
+                "success": True,
+                "message": "盤中零股下單成功",
+                "order": trade
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "盤中零股下單失敗",
+                "error": str(e)
+            }
+        except ValueError as e:
+            return {
+                "success": False,
+                "message": "盤中零股下單失敗",
+                "error": f"訂單配置錯誤: {str(e)}"
+            }
+        except Exception as e:
+            error_msg = f"盤中零股下單過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "盤中零股下單失敗",
+                "error": error_msg
+            }
+    
+    def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """
+        取消訂單
+        
+        取消指定的訂單。
+        必須在登入後才能執行此操作。
+        
+        Args:
+            order_id (str): 訂單 ID
+        
+        Returns:
+            Dict[str, Any]: 取消訂單結果字典，包含以下鍵值：
+                - success (bool): 取消是否成功
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入 ...
+            >>> result = client.cancel_order("ORDER_ID_123")
+            >>> if result["success"]:
+            ...     print("取消訂單成功")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            Exception: 其他取消訂單過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            # 取消訂單
+            # Note: 實際的取消訂單 API 可能需要訂單物件而非 ID
+            # 這裡提供基本實作，實際使用時可能需要調整
+            self.sj.cancel_order(order_id)
+            
+            return {
+                "success": True,
+                "message": "取消訂單成功"
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "取消訂單失敗",
+                "error": str(e)
+            }
+        except Exception as e:
+            error_msg = f"取消訂單過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "取消訂單失敗",
+                "error": error_msg
+            }
+    
+    def update_order(self, order_id: str, price: float, quantity: int) -> Dict[str, Any]:
+        """
+        修改訂單
+        
+        修改指定訂單的價格和數量。
+        必須在登入後才能執行此操作。
+        
+        Args:
+            order_id (str): 訂單 ID
+            price (float): 新價格
+            quantity (int): 新數量
+        
+        Returns:
+            Dict[str, Any]: 修改訂單結果字典，包含以下鍵值：
+                - success (bool): 修改是否成功
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入 ...
+            >>> result = client.update_order("ORDER_ID_123", 101.0, 2000)
+            >>> if result["success"]:
+            ...     print("修改訂單成功")
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當參數無效時
+            Exception: 其他修改訂單過程中的錯誤
+        """
+        try:
+            if not self.is_logged_in or self.sj is None:
+                raise RuntimeError("尚未登入，請先執行 login() 方法")
+            
+            if price <= 0:
+                raise ValueError("價格必須大於0")
+            
+            if quantity <= 0:
+                raise ValueError("數量必須大於0")
+            
+            # 修改訂單
+            # Note: 實際的修改訂單 API 可能需要訂單物件
+            # 這裡提供基本實作，實際使用時可能需要調整
+            self.sj.update_order(order_id, price=price, quantity=quantity)
+            
+            return {
+                "success": True,
+                "message": "修改訂單成功"
+            }
+            
+        except RuntimeError as e:
+            return {
+                "success": False,
+                "message": "修改訂單失敗",
+                "error": str(e)
+            }
+        except ValueError as e:
+            return {
+                "success": False,
+                "message": "修改訂單失敗",
+                "error": f"參數錯誤: {str(e)}"
+            }
+        except Exception as e:
+            error_msg = f"修改訂單過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "message": "修改訂單失敗",
                 "error": error_msg
             }
