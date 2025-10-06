@@ -515,6 +515,7 @@ class ShioajiClient(ITradingClient, IOrderManager):
             >>> result = client.set_order_callback()
             >>> if result["success"]:
             ...     print("回調設置成功")
+            ...     # 之後可以透過 client.order_deal_callback.get_deals() 取得成交記錄
         
         Raises:
             RuntimeError: 當尚未登入時
@@ -528,8 +529,8 @@ class ShioajiClient(ITradingClient, IOrderManager):
             self.sj.set_order_callback(self.order_deal_callback.on_order)
             
             # 設置成交回調
-            # Note: Shioaji 的成交回調設置方式可能因版本而異
-            # 這裡提供基本實作，實際使用時可能需要調整
+            # Shioaji 使用同一個 callback 處理委託和成交
+            # 成交回報會透過 on_order 回調接收
             
             return {
                 "success": True,
@@ -547,6 +548,115 @@ class ShioajiClient(ITradingClient, IOrderManager):
             return {
                 "success": False,
                 "message": "設置回調失敗",
+                "error": error_msg
+            }
+    
+    def get_deal_report(self, order_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        取得成交回報
+        
+        取得成交回報資訊。可以指定訂單 ID 來取得特定訂單的成交記錄，
+        或者取得所有成交記錄。
+        
+        Args:
+            order_id (Optional[str]): 訂單 ID，如果為 None 則返回所有成交記錄
+        
+        Returns:
+            Dict[str, Any]: 成交回報字典，包含以下鍵值：
+                - success (bool): 取得是否成功
+                - deals (List[Dict]): 成交記錄列表
+                - total_quantity (int): 總成交數量
+                - average_price (float): 平均成交價格
+                - message (str): 結果訊息
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和設置回調 ...
+            >>> # 取得所有成交記錄
+            >>> report = client.get_deal_report()
+            >>> print(f"總成交數量: {report['total_quantity']}")
+            >>> print(f"平均成交價: {report['average_price']}")
+            >>> 
+            >>> # 取得特定訂單的成交記錄
+            >>> report = client.get_deal_report("ORDER_123")
+            >>> for deal in report['deals']:
+            ...     print(f"成交價格: {deal.get('price')}, 數量: {deal.get('quantity')}")
+        
+        Raises:
+            RuntimeError: 當尚未設置回調時
+        """
+        try:
+            if order_id:
+                deals = self.order_deal_callback.get_deals_by_order_id(order_id)
+                total_quantity = self.order_deal_callback.get_total_deal_quantity(order_id)
+                average_price = self.order_deal_callback.get_average_deal_price(order_id)
+            else:
+                deals = self.order_deal_callback.get_deals()
+                total_quantity = self.order_deal_callback.get_total_deal_quantity()
+                average_price = self.order_deal_callback.get_average_deal_price()
+            
+            return {
+                "success": True,
+                "deals": deals,
+                "total_quantity": total_quantity,
+                "average_price": average_price,
+                "message": f"成功取得 {len(deals)} 筆成交記錄"
+            }
+            
+        except Exception as e:
+            error_msg = f"取得成交回報過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "deals": [],
+                "total_quantity": 0,
+                "average_price": 0.0,
+                "message": "取得成交回報失敗",
+                "error": error_msg
+            }
+    
+    def get_latest_deal_report(self) -> Dict[str, Any]:
+        """
+        取得最新成交回報
+        
+        取得最新一筆成交記錄。
+        
+        Returns:
+            Dict[str, Any]: 最新成交回報字典，包含以下鍵值：
+                - success (bool): 取得是否成功
+                - deal (Optional[Dict]): 最新成交記錄
+                - message (str): 結果訊息
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入和設置回調 ...
+            >>> report = client.get_latest_deal_report()
+            >>> if report["success"] and report["deal"]:
+            ...     deal = report["deal"]
+            ...     print(f"最新成交價格: {deal.get('price')}")
+            ...     print(f"成交數量: {deal.get('quantity')}")
+        """
+        try:
+            latest_deal = self.order_deal_callback.get_latest_deal()
+            
+            if latest_deal:
+                return {
+                    "success": True,
+                    "deal": latest_deal,
+                    "message": "成功取得最新成交記錄"
+                }
+            else:
+                return {
+                    "success": True,
+                    "deal": None,
+                    "message": "目前沒有成交記錄"
+                }
+            
+        except Exception as e:
+            error_msg = f"取得最新成交回報過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "deal": None,
+                "message": "取得最新成交回報失敗",
                 "error": error_msg
             }
     

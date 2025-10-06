@@ -349,3 +349,150 @@ class OrderDealCallbackHandler:
             >>> print(f"共有 {len(deals)} 筆成交")
         """
         return self.deals
+    
+    def get_latest_deal(self) -> Optional[Dict[str, Any]]:
+        """
+        取得最新的成交記錄
+        
+        Returns:
+            Optional[Dict[str, Any]]: 最新成交記錄，如果沒有則返回 None
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收成交後 ...
+            >>> latest = handler.get_latest_deal()
+            >>> if latest:
+            ...     print(f"最新成交價格: {latest.get('price')}")
+        """
+        if len(self.deals) > 0:
+            return self.deals[-1]
+        return None
+    
+    def get_deals_by_order_id(self, order_id: str) -> List[Dict[str, Any]]:
+        """
+        根據訂單 ID 取得成交記錄
+        
+        Args:
+            order_id (str): 訂單 ID
+        
+        Returns:
+            List[Dict[str, Any]]: 該訂單的成交記錄列表
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收成交後 ...
+            >>> deals = handler.get_deals_by_order_id("ORDER_123")
+            >>> print(f"訂單 ORDER_123 共有 {len(deals)} 筆成交")
+        """
+        return [
+            deal for deal in self.deals
+            if deal.get('order_id') == order_id or deal.get('ord_id') == order_id
+        ]
+    
+    def get_total_deal_quantity(self, order_id: Optional[str] = None) -> int:
+        """
+        取得成交總數量
+        
+        Args:
+            order_id (Optional[str]): 訂單 ID，如果為 None 則計算所有成交
+        
+        Returns:
+            int: 成交總數量
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收成交後 ...
+            >>> total = handler.get_total_deal_quantity()
+            >>> print(f"總成交數量: {total}")
+            >>> order_total = handler.get_total_deal_quantity("ORDER_123")
+            >>> print(f"訂單 ORDER_123 成交數量: {order_total}")
+        """
+        if order_id:
+            deals = self.get_deals_by_order_id(order_id)
+        else:
+            deals = self.deals
+        
+        total = 0
+        for deal in deals:
+            quantity = deal.get('quantity') or deal.get('deal_quantity') or deal.get('qty') or 0
+            total += quantity
+        
+        return total
+    
+    def get_average_deal_price(self, order_id: Optional[str] = None) -> float:
+        """
+        取得平均成交價格
+        
+        Args:
+            order_id (Optional[str]): 訂單 ID，如果為 None 則計算所有成交
+        
+        Returns:
+            float: 平均成交價格，如果沒有成交則返回 0.0
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> # ... 接收成交後 ...
+            >>> avg_price = handler.get_average_deal_price()
+            >>> print(f"平均成交價: {avg_price}")
+        """
+        if order_id:
+            deals = self.get_deals_by_order_id(order_id)
+        else:
+            deals = self.deals
+        
+        if not deals:
+            return 0.0
+        
+        total_amount = 0.0
+        total_quantity = 0
+        
+        for deal in deals:
+            price = deal.get('price') or deal.get('deal_price') or 0.0
+            quantity = deal.get('quantity') or deal.get('deal_quantity') or deal.get('qty') or 0
+            total_amount += price * quantity
+            total_quantity += quantity
+        
+        if total_quantity == 0:
+            return 0.0
+        
+        return total_amount / total_quantity
+    
+    def clear_deals(self, order_id: Optional[str] = None) -> None:
+        """
+        清除成交記錄
+        
+        Args:
+            order_id (Optional[str]): 訂單 ID，如果為 None 則清除所有成交記錄
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> handler.clear_deals("ORDER_123")  # 清除特定訂單的成交記錄
+            >>> handler.clear_deals()  # 清除所有成交記錄
+        """
+        if order_id is None:
+            self.deals.clear()
+        else:
+            self.deals = [
+                deal for deal in self.deals
+                if deal.get('order_id') != order_id and deal.get('ord_id') != order_id
+            ]
+    
+    def clear_orders(self, order_id: Optional[str] = None) -> None:
+        """
+        清除委託記錄
+        
+        Args:
+            order_id (Optional[str]): 訂單 ID，如果為 None 則清除所有委託記錄
+        
+        Examples:
+            >>> handler = OrderDealCallbackHandler()
+            >>> handler.clear_orders("ORDER_123")  # 清除特定訂單的委託記錄
+            >>> handler.clear_orders()  # 清除所有委託記錄
+        """
+        if order_id is None:
+            self.orders.clear()
+        else:
+            self.orders = [
+                order for order in self.orders
+                if order.get('order_id') != order_id and order.get('ord_id') != order_id
+            ]

@@ -150,6 +150,9 @@ client.login(config)
 ca_result = client.activate_ca("YOUR_CA_PASSWORD")
 
 if ca_result["success"]:
+    # 設置委託成交回調
+    client.set_order_callback()
+    
     # 取得商品
     client.fetch_contracts()
     stocks = client.get_contracts("Stocks")
@@ -177,6 +180,38 @@ if ca_result["success"]:
     odd_result = client.place_intraday_odd_order(odd_config)
     if odd_result["success"]:
         print("零股下單成功")
+```
+
+### 取得成交回報
+
+```python
+# 先設置委託成交回調
+client.set_order_callback()
+
+# ... 下單後 ...
+
+# 取得所有成交記錄
+report = client.get_deal_report()
+print(f"總成交數量: {report['total_quantity']}")
+print(f"平均成交價: {report['average_price']}")
+for deal in report['deals']:
+    print(f"成交時間: {deal['timestamp']}")
+    print(f"成交價格: {deal.get('price')}")
+    print(f"成交數量: {deal.get('quantity')}")
+
+# 取得特定訂單的成交記錄
+order_report = client.get_deal_report("ORDER_ID_123")
+print(f"訂單 ORDER_ID_123 成交數量: {order_report['total_quantity']}")
+
+# 取得最新成交
+latest = client.get_latest_deal_report()
+if latest["success"] and latest["deal"]:
+    print(f"最新成交價: {latest['deal'].get('price')}")
+
+# 直接透過 callback handler 取得詳細資訊
+all_deals = client.order_deal_callback.get_deals()
+avg_price = client.order_deal_callback.get_average_deal_price()
+total_qty = client.order_deal_callback.get_total_deal_quantity()
 ```
 
 ### 啟用憑證（用於下單）
@@ -257,6 +292,8 @@ client = ShioajiClient(validator=custom_validator)
 - `place_intraday_odd_order(order_config: IntradayOddOrderConfig) -> Dict[str, Any]`: 下盤中零股訂單
 - `cancel_order(order_id: str) -> Dict[str, Any]`: 取消訂單
 - `update_order(order_id: str, price: float, quantity: int) -> Dict[str, Any]`: 修改訂單
+- `get_deal_report(order_id: Optional[str]) -> Dict[str, Any]`: 取得成交回報
+- `get_latest_deal_report() -> Dict[str, Any]`: 取得最新成交回報
 
 ### OrderConfig
 
@@ -301,6 +338,12 @@ client = ShioajiClient(validator=custom_validator)
 - `on_deal(deal: Any)`: 處理成交回調
 - `get_orders() -> List[Dict]`: 取得所有委託記錄
 - `get_deals() -> List[Dict]`: 取得所有成交記錄
+- `get_latest_deal() -> Optional[Dict]`: 取得最新成交記錄
+- `get_deals_by_order_id(order_id: str) -> List[Dict]`: 根據訂單 ID 取得成交記錄
+- `get_total_deal_quantity(order_id: Optional[str]) -> int`: 取得成交總數量
+- `get_average_deal_price(order_id: Optional[str]) -> float`: 取得平均成交價格
+- `clear_deals(order_id: Optional[str])`: 清除成交記錄
+- `clear_orders(order_id: Optional[str])`: 清除委託記錄
 
 ## 錯誤處理
 
