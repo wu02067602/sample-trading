@@ -333,3 +333,155 @@ class ShioajiConnector:
             1
         """
         return self.subscribed_contracts.copy()
+    
+    def place_stock_order(
+        self,
+        contract: Any,
+        action: str,
+        price: float,
+        quantity: int
+    ) -> Any:
+        """
+        下一般股票委託單。
+        
+        此方法用於下達一般股票（整股）的委託單。
+        支援現股買進和賣出。
+        
+        Args:
+            contract (Any): 股票合約物件（透過 get_stock_contract 取得）
+            action (str): 委託動作，"Buy" 為買進，"Sell" 為賣出
+            price (float): 委託價格（元），0 表示市價單
+            quantity (int): 委託數量（股），必須為 1000 的倍數
+        
+        Returns:
+            Any: 委託回報物件，包含委託書號、狀態等資訊
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.fetch_contracts()
+            >>> contract = connector.get_stock_contract("2330")
+            >>> # 以 600 元買進 1000 股台積電
+            >>> trade = connector.place_stock_order(contract, "Buy", 600, 1000)
+            >>> print(trade.status.status)
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試下單時
+            ValueError: 當動作、價格或數量參數無效時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before placing order.")
+        
+        if action not in ["Buy", "Sell"]:
+            raise ValueError(f"Invalid action '{action}'. Must be 'Buy' or 'Sell'.")
+        
+        if price < 0:
+            raise ValueError(f"Price must be non-negative, got {price}")
+        
+        if quantity <= 0:
+            raise ValueError(f"Quantity must be positive, got {quantity}")
+        
+        if quantity % 1000 != 0:
+            raise ValueError(f"Quantity must be multiple of 1000 for regular stock, got {quantity}")
+        
+        # 建立訂單物件
+        order = self.sj.Order(
+            price=price,
+            quantity=quantity,
+            action=action,
+            price_type="LMT" if price > 0 else "MKT",
+            order_type="ROD",
+            order_cond="Cash",
+            account=self.sj.stock_account
+        )
+        
+        # 執行下單
+        trade = self.sj.place_order(contract, order)
+        return trade
+    
+    def place_odd_lot_order(
+        self,
+        contract: Any,
+        action: str,
+        price: float,
+        quantity: int
+    ) -> Any:
+        """
+        下盤中零股委託單。
+        
+        此方法用於下達盤中零股（小於 1000 股）的委託單。
+        支援零股買進和賣出。
+        
+        Args:
+            contract (Any): 股票合約物件（透過 get_stock_contract 取得）
+            action (str): 委託動作，"Buy" 為買進，"Sell" 為賣出
+            price (float): 委託價格（元），0 表示市價單
+            quantity (int): 委託數量（股），必須小於 1000
+        
+        Returns:
+            Any: 委託回報物件，包含委託書號、狀態等資訊
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> connector.fetch_contracts()
+            >>> contract = connector.get_stock_contract("2330")
+            >>> # 以 600 元買進 100 股台積電零股
+            >>> trade = connector.place_odd_lot_order(contract, "Buy", 600, 100)
+            >>> print(trade.status.status)
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試下單時
+            ValueError: 當動作、價格或數量參數無效時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before placing order.")
+        
+        if action not in ["Buy", "Sell"]:
+            raise ValueError(f"Invalid action '{action}'. Must be 'Buy' or 'Sell'.")
+        
+        if price < 0:
+            raise ValueError(f"Price must be non-negative, got {price}")
+        
+        if quantity <= 0:
+            raise ValueError(f"Quantity must be positive, got {quantity}")
+        
+        if quantity >= 1000:
+            raise ValueError(f"Quantity must be less than 1000 for odd lot, got {quantity}")
+        
+        # 建立零股訂單物件
+        order = self.sj.Order(
+            price=price,
+            quantity=quantity,
+            action=action,
+            price_type="LMT" if price > 0 else "MKT",
+            order_type="ROD",
+            order_cond="Cash",
+            daytrade_short=False,
+            account=self.sj.stock_account
+        )
+        
+        # 執行下單
+        trade = self.sj.place_order(contract, order, odd_lot=True)
+        return trade
+    
+    def get_account_balance(self) -> Dict[str, Any]:
+        """
+        取得帳戶餘額資訊。
+        
+        Returns:
+            Dict[str, Any]: 帳戶餘額資訊，包含可用資金、庫存等
+        
+        Examples:
+            >>> connector = ShioajiConnector("your_api_key", "your_secret_key")
+            >>> connector.login()
+            >>> balance = connector.get_account_balance()
+            >>> print(balance)
+        
+        Raises:
+            RuntimeError: 當尚未登入就嘗試查詢餘額時
+        """
+        if self.sj is None:
+            raise RuntimeError("Not logged in. Please login first before getting account balance.")
+        
+        return self.sj.account_balance()
