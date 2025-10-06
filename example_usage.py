@@ -52,6 +52,34 @@ def main():
         # 例如：取得合約、下單、查詢部位等
         print(f"\nShioaji API 實例已準備就緒：{trader.sj}")
         
+        # 取得商品檔
+        print("\n=== 商品檔查詢範例 ===")
+        
+        # 方法 1：使用 contracts 屬性直接訪問
+        if trader.contracts:
+            print(f"\n商品檔已載入：{trader.contracts}")
+            
+            # 查詢台積電
+            tsmc = trader.contracts.Stocks["2330"]
+            print(f"\n台積電資訊：")
+            print(f"  代碼：{tsmc.code}")
+            print(f"  名稱：{tsmc.name}")
+            print(f"  交易所：{tsmc.exchange}")
+        
+        # 方法 2：使用輔助方法查詢
+        print("\n使用輔助方法查詢：")
+        
+        # 查詢證券
+        stock = trader.get_stock("2330")
+        if stock:
+            print(f"  {stock.code}: {stock.name}")
+        
+        # 搜尋包含關鍵字的商品
+        print("\n搜尋名稱包含「台積」的股票：")
+        results = trader.search_contracts("台積")
+        for contract in results[:3]:  # 顯示前 3 筆
+            print(f"  {contract.code}: {contract.name}")
+        
         # 登出
         print("\n正在登出...")
         if trader.logout():

@@ -14,6 +14,7 @@ class ShioajiTrader:
     
     Attributes:
         sj: Shioaji API 實例，登入成功後可用於後續交易操作
+        contracts: 商品檔物件，提供證券、期貨、選擇權、指數等商品資訊
         
     Examples:
         使用 API Key 登入：
@@ -221,3 +222,176 @@ class ShioajiTrader:
         if self.sj:
             return self.sj.futopt_account
         return None
+    
+    @property
+    def contracts(self):
+        """取得商品檔物件
+        
+        商品檔在登入時會自動下載，包含證券、期貨、選擇權、指數等商品資訊。
+        商品檔會在特定時間更新：07:50, 08:00, 14:45, 17:15。
+        
+        Returns:
+            商品檔物件，若未登入則回傳 None
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> # 取得所有證券商品
+            >>> stocks = trader.contracts.Stocks
+            >>> # 查詢台積電
+            >>> tsmc = trader.contracts.Stocks["2330"]
+            >>> print(tsmc)
+        """
+        if self.sj:
+            return self.sj.Contracts
+        return None
+    
+    def get_stock(self, code: str):
+        """查詢證券商品
+        
+        根據股票代碼查詢證券商品資訊。
+        
+        Args:
+            code: 股票代碼，例如 "2330" (台積電)
+            
+        Returns:
+            證券商品物件，若查詢不到則回傳 None
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> tsmc = trader.get_stock("2330")
+            >>> print(tsmc.name)  # 台積電
+            >>> print(tsmc.exchange)  # TSE
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            return self.contracts.Stocks[code]
+        except Exception as e:
+            print(f"查詢股票 {code} 失敗：{str(e)}")
+            return None
+    
+    def get_future(self, code: str):
+        """查詢期貨商品
+        
+        根據期貨代碼查詢期貨商品資訊。
+        
+        Args:
+            code: 期貨代碼，例如 "TXFR1" (台指期近月)
+            
+        Returns:
+            期貨商品物件，若查詢不到則回傳 None
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> txf = trader.get_future("TXFR1")
+            >>> print(txf.name)
+            >>> print(txf.delivery_month)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            return self.contracts.Futures[code]
+        except Exception as e:
+            print(f"查詢期貨 {code} 失敗：{str(e)}")
+            return None
+    
+    def get_option(self, code: str):
+        """查詢選擇權商品
+        
+        根據選擇權代碼查詢選擇權商品資訊。
+        
+        Args:
+            code: 選擇權代碼
+            
+        Returns:
+            選擇權商品物件，若查詢不到則回傳 None
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> option = trader.get_option("TXO12000C1")
+            >>> print(option.name)
+            >>> print(option.strike_price)
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        try:
+            return self.contracts.Options[code]
+        except Exception as e:
+            print(f"查詢選擇權 {code} 失敗：{str(e)}")
+            return None
+    
+    def search_contracts(self, keyword: str, category: str = "Stocks"):
+        """搜尋商品
+        
+        根據關鍵字搜尋商品名稱或代碼。
+        
+        Args:
+            keyword: 搜尋關鍵字，可以是商品名稱或代碼的一部分
+            category: 商品類別，可選 "Stocks", "Futures", "Options", "Indexs"，
+                     預設為 "Stocks"
+            
+        Returns:
+            List: 符合條件的商品列表
+            
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當商品類別無效時
+            
+        Examples:
+            >>> trader = ShioajiTrader()
+            >>> trader.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> # 搜尋名稱包含「台積」的股票
+            >>> results = trader.search_contracts("台積")
+            >>> for contract in results:
+            ...     print(f"{contract.code}: {contract.name}")
+            >>> # 搜尋期貨
+            >>> futures = trader.search_contracts("TX", category="Futures")
+        """
+        if not self.sj:
+            raise RuntimeError("請先登入系統")
+        
+        valid_categories = ["Stocks", "Futures", "Options", "Indexs"]
+        if category not in valid_categories:
+            raise ValueError(
+                f"商品類別必須是以下其中之一：{', '.join(valid_categories)}"
+            )
+        
+        try:
+            # 取得指定類別的所有商品
+            all_contracts = getattr(self.contracts, category)
+            results = []
+            
+            # 遍歷所有商品，搜尋符合關鍵字的商品
+            for exchange in dir(all_contracts):
+                if exchange.startswith('_'):
+                    continue
+                
+                exchange_obj = getattr(all_contracts, exchange)
+                if hasattr(exchange_obj, '__iter__'):
+                    for contract in exchange_obj:
+                        # 檢查代碼或名稱是否包含關鍵字
+                        if (keyword.lower() in contract.code.lower() or 
+                            keyword in contract.name):
+                            results.append(contract)
+            
+            return results
+            
+        except Exception as e:
+            print(f"搜尋商品失敗：{str(e)}")
+            return []

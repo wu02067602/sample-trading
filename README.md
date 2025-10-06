@@ -8,7 +8,9 @@
 - ✅ 支援 API Key 與帳號密碼兩種登入方式
 - ✅ 完整的 docstring 註解
 - ✅ 類別屬性 `sj` 供後續交易使用
+- ✅ 類別屬性 `contracts` 供查詢商品檔
 - ✅ 帳戶管理功能
+- ✅ 商品檔查詢與搜尋功能
 
 ## 安裝
 
@@ -85,7 +87,37 @@ accounts = trader.list_accounts()
 trader.set_default_account(accounts[0])
 ```
 
-### 4. 登出系統
+### 4. 查詢商品檔
+
+商品檔在登入時會自動下載，包含證券、期貨、選擇權、指數等商品資訊。
+
+```python
+# 方法 1：使用 contracts 屬性直接訪問
+tsmc = trader.contracts.Stocks["2330"]
+print(f"{tsmc.code}: {tsmc.name}")
+
+# 查詢期貨
+txf = trader.contracts.Futures.TXF["TXFR1"]
+
+# 查詢指數
+tse001 = trader.contracts.Indexs.TSE["001"]
+```
+
+```python
+# 方法 2：使用輔助方法查詢
+stock = trader.get_stock("2330")
+future = trader.get_future("TXFR1")
+option = trader.get_option("TXO12000C1")
+```
+
+```python
+# 方法 3：搜尋商品
+results = trader.search_contracts("台積")
+for contract in results:
+    print(f"{contract.code}: {contract.name}")
+```
+
+### 5. 登出系統
 
 ```python
 trader.logout()
@@ -94,15 +126,18 @@ trader.logout()
 ## 類別屬性
 
 - `sj`: Shioaji API 實例，登入成功後可用於所有交易操作
+- `contracts`: 商品檔物件，提供證券、期貨、選擇權、指數等商品資訊
 
 ## 參考資料
 
 - [Shioaji 官方文件](https://sinotrade.github.io/)
 - [Shioaji 登入教學](https://sinotrade.github.io/zh/tutor/login/)
+- [Shioaji 商品檔教學](https://sinotrade.github.io/zh/tutor/contract/)
 
 ## 範例程式
 
-完整範例請參考 `example_usage.py`
+- `example_usage.py` - 基本使用範例（含登入、帳戶管理、商品查詢）
+- `example_contracts.py` - 商品檔查詢範例（詳細示範各種查詢方法）
 
 ## 授權
 
