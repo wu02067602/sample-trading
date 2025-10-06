@@ -5,7 +5,8 @@ Shioaji 交易客戶端模組
 """
 
 import shioaji as sj
-from typing import Optional, Any
+from typing import Optional, Any, Callable
+from quote_callback import QuoteCallback, OrderCallback, DefaultQuoteCallback, DefaultOrderCallback
 
 
 class ShioajiClient:
@@ -17,12 +18,16 @@ class ShioajiClient:
     Attributes:
         sj (Optional[sj.Shioaji]): Shioaji API 實例，登入成功後可用
         contracts (Optional[Any]): 商品檔物件，登入成功後自動載入
+        quote_callback (Optional[QuoteCallback]): 報價回調處理器
+        order_callback (Optional[OrderCallback]): 訂單回調處理器
     """
     
     def __init__(self):
         """初始化 ShioajiClient 實例。"""
         self.sj: Optional[sj.Shioaji] = None
         self.contracts: Optional[Any] = None
+        self.quote_callback: Optional[QuoteCallback] = None
+        self.order_callback: Optional[OrderCallback] = None
     
     def login(
         self,
@@ -122,16 +127,22 @@ class ShioajiClient:
             result = self.sj.logout()
             self.sj = None
             self.contracts = None
+            self.quote_callback = None
+            self.order_callback = None
             return result
         except (ConnectionError, OSError) as e:
             # 即使登出失敗，也清理本地狀態
             self.sj = None
             self.contracts = None
+            self.quote_callback = None
+            self.order_callback = None
             raise RuntimeError(f"登出時發生網路錯誤: {e}")
         except AttributeError as e:
             # Shioaji 物件可能已損壞
             self.sj = None
             self.contracts = None
+            self.quote_callback = None
+            self.order_callback = None
             raise RuntimeError(f"登出時發生錯誤，API 物件狀態異常: {e}")
     
     def is_logged_in(self) -> bool:
@@ -266,6 +277,178 @@ class ShioajiClient:
             raise ValueError(f"找不到選擇權商品: {symbol}")
         except AttributeError as e:
             raise RuntimeError(f"商品檔結構異常: {e}")
+    
+    def set_quote_callback(
+        self,
+        callback: Optional[QuoteCallback] = None,
+        callback_func: Optional[Callable] = None
+    ) -> None:
+        """
+        設定報價回調處理器。
+        
+        Args:
+            callback (Optional[QuoteCallback]): 自訂的報價回調處理器
+            callback_func (Optional[Callable]): 簡單的回調函數，
+                                                 如果未提供 callback 則使用此函數建立預設處理器
+        
+        Returns:
+            None
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> def my_callback(topic, data):
+            ...     print(f"收到 {topic} 報價")
+            >>> client.set_quote_callback(callback_func=my_callback)
+        
+        Raises:
+            ValueError: 當同時提供 callback 和 callback_func 時
+        """
+        if callback is not None and callback_func is not None:
+            raise ValueError("不可同時設定 callback 和 callback_func")
+        
+        if callback is not None:
+            self.quote_callback = callback
+        else:
+            self.quote_callback = DefaultQuoteCallback(callback_func)
+    
+    def set_order_callback(
+        self,
+        callback: Optional[OrderCallback] = None,
+        callback_func: Optional[Callable] = None
+    ) -> None:
+        """
+        設定訂單回調處理器。
+        
+        Args:
+            callback (Optional[OrderCallback]): 自訂的訂單回調處理器
+            callback_func (Optional[Callable]): 簡單的回調函數，
+                                                 如果未提供 callback 則使用此函數建立預設處理器
+        
+        Returns:
+            None
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> def my_callback(state, data):
+            ...     print(f"訂單狀態: {state}")
+            >>> client.set_order_callback(callback_func=my_callback)
+        
+        Raises:
+            ValueError: 當同時提供 callback 和 callback_func 時
+        """
+        if callback is not None and callback_func is not None:
+            raise ValueError("不可同時設定 callback 和 callback_func")
+        
+        if callback is not None:
+            self.order_callback = callback
+        else:
+            self.order_callback = DefaultOrderCallback(callback_func)
+    
+    def subscribe_quote(self, contract: Any) -> None:
+        """
+        訂閱商品報價。
+        
+        Args:
+            contract (Any): 商品檔物件（透過 get_stock_contract 等方法取得）
+        
+        Returns:
+            None
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> client.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            True
+            >>> client.set_quote_callback(callback_func=lambda t, d: print(f"報價: {t}"))
+            >>> contract = client.get_stock_contract("2330")
+            >>> client.subscribe_quote(contract)
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            RuntimeError: 當尚未設定報價回調處理器時
+            ValueError: 當商品檔物件無效時
+        """
+        if not self.is_logged_in():
+            raise RuntimeError("尚未登入，無法訂閱報價")
+        
+        if self.quote_callback is None:
+            raise RuntimeError("尚未設定報價回調處理器，請先呼叫 set_quote_callback()")
+        
+        if not hasattr(contract, 'symbol'):
+            raise ValueError("無效的商品檔物件")
+        
+        try:
+            # 設定報價回調
+            @self.sj.on_quote
+            def quote_handler(topic: str, data: Any) -> None:
+                if self.quote_callback:
+                    self.quote_callback.on_quote(topic, data)
+            
+            # 訂閱報價
+            self.sj.quote.subscribe(contract)
+        except AttributeError as e:
+            raise RuntimeError(f"訂閱報價時發生錯誤: {e}")
+    
+    def unsubscribe_quote(self, contract: Any) -> None:
+        """
+        取消訂閱商品報價。
+        
+        Args:
+            contract (Any): 商品檔物件
+        
+        Returns:
+            None
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> contract = client.get_stock_contract("2330")
+            >>> client.unsubscribe_quote(contract)
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            ValueError: 當商品檔物件無效時
+        """
+        if not self.is_logged_in():
+            raise RuntimeError("尚未登入，無法取消訂閱報價")
+        
+        if not hasattr(contract, 'symbol'):
+            raise ValueError("無效的商品檔物件")
+        
+        try:
+            self.sj.quote.unsubscribe(contract)
+        except AttributeError as e:
+            raise RuntimeError(f"取消訂閱報價時發生錯誤: {e}")
+    
+    def activate_order_callback(self) -> None:
+        """
+        啟用訂單回調監控。
+        
+        Returns:
+            None
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> client.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            True
+            >>> client.set_order_callback(callback_func=lambda s, d: print(f"訂單: {s}"))
+            >>> client.activate_order_callback()
+        
+        Raises:
+            RuntimeError: 當尚未登入時
+            RuntimeError: 當尚未設定訂單回調處理器時
+        """
+        if not self.is_logged_in():
+            raise RuntimeError("尚未登入，無法啟用訂單回調")
+        
+        if self.order_callback is None:
+            raise RuntimeError("尚未設定訂單回調處理器，請先呼叫 set_order_callback()")
+        
+        try:
+            @self.sj.on_order_callback
+            def order_handler(state: str, data: dict) -> None:
+                if self.order_callback:
+                    self.order_callback.on_order(state, data)
+        except AttributeError as e:
+            raise RuntimeError(f"啟用訂單回調時發生錯誤: {e}")
 
 
 class AuthenticationError(Exception):
