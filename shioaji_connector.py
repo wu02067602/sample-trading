@@ -2,14 +2,14 @@
 Shioaji 交易連線管理模組
 
 此模組提供永豐金證券 Shioaji API 的連線管理功能，
-包含登入、登出以及連線狀態管理。
+包含登入、登出、連線狀態管理以及商品檔查詢。
 
 Author: Trading System Team
 Date: 2025-10-06
 """
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 
 try:
@@ -32,6 +32,7 @@ class ShioajiConnector:
         sj (shioaji.Shioaji): Shioaji API 實例，登入成功後可使用
         is_connected (bool): 連線狀態
         login_time (datetime): 登入時間
+        contracts (object): 商品檔物件，包含所有可交易的商品資訊
         
     Examples:
         >>> connector = ShioajiConnector(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET")
@@ -78,6 +79,7 @@ class ShioajiConnector:
         self.sj: Optional[sj.Shioaji] = None
         self.is_connected: bool = False
         self.login_time: Optional[datetime] = None
+        self.contracts: Optional[Any] = None
         
         # 設置日誌
         self.logger = logging.getLogger(__name__)
@@ -174,6 +176,11 @@ class ShioajiConnector:
             self.login_time = datetime.now()
             self.logger.info(f"登入成功！帳戶資訊: {accounts}")
             
+            # 若有下載合約檔，則儲存到 contracts 屬性
+            if fetch_contract:
+                self.contracts = self.sj.Contracts
+                self.logger.info("商品檔已載入完成")
+            
             # 如果提供憑證，則啟用下單功能
             if ca_path and ca_passwd:
                 self._activate_ca(ca_path, ca_passwd)
@@ -248,6 +255,255 @@ class ShioajiConnector:
             self.logger.error(f"登出失敗: {str(e)}")
             return False
     
+    def get_contracts(self) -> Optional[Any]:
+        """
+        取得所有商品檔
+        
+        返回包含所有可交易商品的 Contracts 物件，包括股票、期貨、選擇權等。
+        
+        Returns:
+            Optional[Any]: Contracts 物件，若尚未登入或未下載則返回 None
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> contracts = connector.get_contracts()
+            >>> # 取得所有股票合約
+            >>> stocks = contracts.Stocks
+            >>> # 取得所有期貨合約
+            >>> futures = contracts.Futures
+            
+        Note:
+            - 需要先登入才能取得商品檔
+            - 登入時需設定 fetch_contract=True (預設值)
+            - Contracts 物件包含: Stocks, Futures, Options 等屬性
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if self.contracts is None:
+            self.logger.warning("商品檔未載入，請在登入時設定 fetch_contract=True")
+        
+        return self.contracts
+    
+    def search_stock(self, keyword: str) -> List[Any]:
+        """
+        搜尋股票商品
+        
+        根據關鍵字搜尋股票商品，可使用股票代碼或名稱進行搜尋。
+        
+        Args:
+            keyword (str): 搜尋關鍵字（股票代碼或名稱）
+            
+        Returns:
+            List[Any]: 符合條件的股票合約列表
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當商品檔未載入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> # 使用股票代碼搜尋
+            >>> result = connector.search_stock("2330")
+            >>> print(result[0].code, result[0].name)  # 2330 台積電
+            >>> 
+            >>> # 使用股票名稱搜尋
+            >>> result = connector.search_stock("台積電")
+            
+        Note:
+            - 搜尋不區分大小寫
+            - 支援部分匹配
+            - 返回的是合約物件列表
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if self.contracts is None:
+            raise ValueError("商品檔未載入，請確保登入時設定 fetch_contract=True")
+        
+        try:
+            results = []
+            stocks = self.contracts.Stocks
+            
+            # 搜尋股票代碼或名稱
+            for stock in stocks:
+                if keyword.upper() in stock.code.upper() or keyword in stock.name:
+                    results.append(stock)
+            
+            self.logger.info(f"搜尋關鍵字 '{keyword}' 找到 {len(results)} 筆股票資料")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"搜尋股票失敗: {str(e)}")
+            raise
+    
+    def get_stock_by_code(self, code: str) -> Optional[Any]:
+        """
+        根據股票代碼取得股票合約
+        
+        精確查詢特定股票代碼的合約資料。
+        
+        Args:
+            code (str): 股票代碼（例如："2330"）
+            
+        Returns:
+            Optional[Any]: 股票合約物件，若找不到則返回 None
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當商品檔未載入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> if stock:
+            >>>     print(f"股票: {stock.code} {stock.name}")
+            >>>     print(f"交易所: {stock.exchange}")
+            
+        Note:
+            - 使用精確匹配
+            - 股票代碼需要完整且正確
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if self.contracts is None:
+            raise ValueError("商品檔未載入，請確保登入時設定 fetch_contract=True")
+        
+        try:
+            stocks = self.contracts.Stocks
+            
+            # 使用字典查詢 (Shioaji 支援)
+            if hasattr(stocks, code):
+                stock = getattr(stocks, code)
+                self.logger.info(f"找到股票: {code} {stock.name}")
+                return stock
+            
+            # 如果使用屬性查詢失敗，嘗試遍歷
+            for stock in stocks:
+                if stock.code == code:
+                    self.logger.info(f"找到股票: {code} {stock.name}")
+                    return stock
+            
+            self.logger.warning(f"找不到股票代碼: {code}")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"取得股票失敗: {str(e)}")
+            raise
+    
+    def search_futures(self, keyword: str) -> List[Any]:
+        """
+        搜尋期貨商品
+        
+        根據關鍵字搜尋期貨商品，可使用商品代碼或名稱進行搜尋。
+        
+        Args:
+            keyword (str): 搜尋關鍵字（期貨代碼或名稱）
+            
+        Returns:
+            List[Any]: 符合條件的期貨合約列表
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當商品檔未載入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> # 搜尋台指期
+            >>> result = connector.search_futures("TX")
+            >>> for contract in result:
+            >>>     print(contract.code, contract.name)
+            
+        Note:
+            - 期貨商品包含各種到期月份的合約
+            - 搜尋結果可能包含多個不同月份的合約
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if self.contracts is None:
+            raise ValueError("商品檔未載入，請確保登入時設定 fetch_contract=True")
+        
+        try:
+            results = []
+            futures = self.contracts.Futures
+            
+            # 搜尋期貨代碼或名稱
+            for future in futures:
+                if keyword.upper() in future.code.upper() or keyword in future.name:
+                    results.append(future)
+            
+            self.logger.info(f"搜尋關鍵字 '{keyword}' 找到 {len(results)} 筆期貨資料")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"搜尋期貨失敗: {str(e)}")
+            raise
+    
+    def get_contracts_summary(self) -> Dict[str, int]:
+        """
+        取得商品檔統計摘要
+        
+        統計各類商品的數量，提供商品檔的概覽資訊。
+        
+        Returns:
+            Dict[str, int]: 包含各類商品數量的字典
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當商品檔未載入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> summary = connector.get_contracts_summary()
+            >>> print(summary)
+            {
+                'stocks': 1800,
+                'futures': 150,
+                'options': 500
+            }
+            
+        Note:
+            - 數量會依市場狀況而變動
+            - 包含所有上市、上櫃商品
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if self.contracts is None:
+            raise ValueError("商品檔未載入，請確保登入時設定 fetch_contract=True")
+        
+        try:
+            summary = {}
+            
+            # 計算股票數量
+            if hasattr(self.contracts, 'Stocks'):
+                summary['stocks'] = len(list(self.contracts.Stocks))
+            
+            # 計算期貨數量
+            if hasattr(self.contracts, 'Futures'):
+                summary['futures'] = len(list(self.contracts.Futures))
+            
+            # 計算選擇權數量
+            if hasattr(self.contracts, 'Options'):
+                summary['options'] = len(list(self.contracts.Options))
+            
+            self.logger.info(f"商品檔統計: {summary}")
+            return summary
+            
+        except Exception as e:
+            self.logger.error(f"取得商品檔統計失敗: {str(e)}")
+            raise
+    
     def get_connection_status(self) -> Dict[str, Any]:
         """
         取得連線狀態資訊
@@ -275,7 +531,8 @@ class ShioajiConnector:
             'is_connected': self.is_connected,
             'login_time': self.login_time.strftime('%Y-%m-%d %H:%M:%S') if self.login_time else None,
             'simulation': self.simulation,
-            'api_initialized': self.sj is not None
+            'api_initialized': self.sj is not None,
+            'contracts_loaded': self.contracts is not None
         }
     
     def __enter__(self):
