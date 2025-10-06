@@ -259,6 +259,39 @@ statistics = client.order_deal_callback.get_order_statistics()
 order_by_id = client.order_deal_callback.get_order_by_id("ORDER_123")
 ```
 
+### 取得帳戶餘額
+
+```python
+# 查詢帳戶餘額
+result = client.get_account_balance()
+if result["success"]:
+    balance = result["balance"]
+    print(f"可用餘額: {balance.available_balance}")
+    print(f"帳戶餘額: {balance.acc_balance}")
+    print(f"已實現損益: {balance.realized_profit_loss}")
+    print(f"未實現損益: {balance.unrealized_profit_loss}")
+```
+
+### 取得持倉資訊
+
+```python
+# 查詢所有持倉（使用預設帳戶）
+result = client.list_positions()
+if result["success"]:
+    print(f"持倉數量: {result['count']}")
+    for position in result["positions"]:
+        print(f"代碼: {position.code}")
+        print(f"數量: {position.quantity}")
+        print(f"損益: {position.pnl}")
+        print(f"平均成本: {position.price}")
+
+# 指定帳戶查詢持倉
+accounts = client.get_accounts()
+if accounts["success"] and accounts["accounts"]:
+    account = accounts["accounts"][0]
+    result = client.list_positions(account)
+```
+
 ### 啟用憑證（用於下單）
 
 ```python
@@ -342,6 +375,8 @@ client = ShioajiClient(validator=custom_validator)
 - `get_order_report(order_id: Optional[str]) -> Dict[str, Any]`: 取得委託回報
 - `get_latest_order_report() -> Dict[str, Any]`: 取得最新委託回報
 - `get_orders_by_status(status: str) -> Dict[str, Any]`: 根據狀態取得委託回報
+- `get_account_balance() -> Dict[str, Any]`: 取得帳戶餘額
+- `list_positions(account: Optional[Any]) -> Dict[str, Any]`: 取得持倉資訊
 
 ### OrderConfig
 

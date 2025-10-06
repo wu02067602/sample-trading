@@ -817,6 +817,140 @@ class ShioajiClient(ITradingClient, IOrderManager):
                 "error": error_msg
             }
     
+    def get_account_balance(self) -> Dict[str, Any]:
+        """
+        取得帳戶餘額
+        
+        查詢帳戶的資金餘額資訊，包括可用餘額、已實現損益等。
+        必須在登入後才能執行此操作。
+        
+        Returns:
+            Dict[str, Any]: 帳戶餘額資訊字典，包含以下鍵值：
+                - success (bool): 查詢是否成功
+                - balance (Optional[Any]): 餘額物件，包含各項資金資訊
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入 ...
+            >>> result = client.get_account_balance()
+            >>> if result["success"]:
+            ...     balance = result["balance"]
+            ...     print(f"可用餘額: {balance.available_balance}")
+            ...     print(f"帳戶餘額: {balance.acc_balance}")
+            ...     print(f"已實現損益: {balance.realized_profit_loss}")
+        
+        Raises:
+            Exception: 當查詢帳戶餘額過程發生錯誤時
+        """
+        if not self.is_logged_in or self.sj is None:
+            return {
+                "success": False,
+                "balance": None,
+                "message": "尚未登入，無法查詢帳戶餘額",
+                "error": "請先執行 login() 方法"
+            }
+        
+        try:
+            balance = self.sj.account_balance()
+            
+            return {
+                "success": True,
+                "balance": balance,
+                "message": "成功取得帳戶餘額"
+            }
+            
+        except Exception as e:
+            error_msg = f"取得帳戶餘額過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "balance": None,
+                "message": "取得帳戶餘額失敗",
+                "error": error_msg
+            }
+    
+    def list_positions(self, account: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        取得持倉資訊
+        
+        查詢帳戶的持倉明細，包括股票、期貨等所有持有部位。
+        必須在登入後才能執行此操作。
+        
+        Args:
+            account (Optional[Any]): 指定帳戶物件，如果為 None 則使用第一個帳戶
+        
+        Returns:
+            Dict[str, Any]: 持倉資訊字典，包含以下鍵值：
+                - success (bool): 查詢是否成功
+                - positions (List[Any]): 持倉列表，每個元素包含部位資訊
+                - count (int): 持倉數量
+                - message (str): 結果訊息
+                - error (Optional[str]): 錯誤訊息（如果失敗）
+        
+        Examples:
+            >>> client = ShioajiClient()
+            >>> # ... 先執行登入 ...
+            >>> result = client.list_positions()
+            >>> if result["success"]:
+            ...     print(f"持倉數量: {result['count']}")
+            ...     for position in result["positions"]:
+            ...         print(f"代碼: {position.code}")
+            ...         print(f"數量: {position.quantity}")
+            ...         print(f"損益: {position.pnl}")
+            >>> 
+            >>> # 指定帳戶查詢
+            >>> accounts = client.get_accounts()
+            >>> if accounts["success"] and accounts["accounts"]:
+            ...     account = accounts["accounts"][0]
+            ...     result = client.list_positions(account)
+        
+        Raises:
+            Exception: 當查詢持倉過程發生錯誤時
+        """
+        if not self.is_logged_in or self.sj is None:
+            return {
+                "success": False,
+                "positions": [],
+                "count": 0,
+                "message": "尚未登入，無法查詢持倉資訊",
+                "error": "請先執行 login() 方法"
+            }
+        
+        try:
+            # 如果沒有指定帳戶，使用第一個帳戶
+            if account is None:
+                accounts_result = self.get_accounts()
+                if not accounts_result["success"] or not accounts_result["accounts"]:
+                    return {
+                        "success": False,
+                        "positions": [],
+                        "count": 0,
+                        "message": "無法取得帳戶資訊",
+                        "error": "請確認已成功登入並有可用帳戶"
+                    }
+                account = accounts_result["accounts"][0]
+            
+            positions = self.sj.list_positions(account)
+            positions_list = list(positions) if positions else []
+            
+            return {
+                "success": True,
+                "positions": positions_list,
+                "count": len(positions_list),
+                "message": f"成功取得 {len(positions_list)} 筆持倉資訊"
+            }
+            
+        except Exception as e:
+            error_msg = f"取得持倉資訊過程發生錯誤: {str(e)}"
+            return {
+                "success": False,
+                "positions": [],
+                "count": 0,
+                "message": "取得持倉資訊失敗",
+                "error": error_msg
+            }
+    
     def place_order(self, order_config: OrderConfig) -> Dict[str, Any]:
         """
         下一般股票訂單

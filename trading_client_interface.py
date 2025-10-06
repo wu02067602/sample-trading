@@ -164,6 +164,35 @@ class ITradingClient(ABC):
         pass
     
     @abstractmethod
+    def get_account_balance(self) -> Dict[str, Any]:
+        """
+        取得帳戶餘額
+        
+        Returns:
+            Dict[str, Any]: 帳戶餘額資訊字典
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
+    def list_positions(self, account: Optional[Any] = None) -> Dict[str, Any]:
+        """
+        取得持倉資訊
+        
+        Args:
+            account (Optional[Any]): 指定帳戶，預設為 None（使用第一個帳戶）
+        
+        Returns:
+            Dict[str, Any]: 持倉資訊字典
+        
+        Raises:
+            NotImplementedError: 子類別必須實作此方法
+        """
+        pass
+    
+    @abstractmethod
     def place_order(self, order_config: Any) -> Dict[str, Any]:
         """
         下一般股票訂單
