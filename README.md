@@ -9,8 +9,10 @@
 - ✅ 安全的登入/登出管理
 - ✅ 憑證認證與下單權限管理
 - ✅ 連線狀態監控
-- ✅ **商品檔管理與查詢（v2.0 新增）**
-- ✅ **股票、期貨商品搜尋功能（v2.0 新增）**
+- ✅ **商品檔管理與查詢（v2.0）**
+- ✅ **股票、期貨商品搜尋功能（v2.0）**
+- ✅ **即時報價訂閱功能（v3.0 新增）**
+- ✅ **Callback 事件處理機制（v3.0 新增）**
 - ✅ 完整的錯誤處理與日誌記錄
 - ✅ 符合 SOLID 原則的物件導向設計
 
@@ -18,13 +20,14 @@
 
 ```
 sample-trading/
-├── shioaji_connector.py   # Shioaji 連線管理核心模組
-├── example_usage.py       # 基本使用範例程式
-├── contract_example.py    # 商品檔查詢範例程式（v2.0 新增）
-├── requirements.txt       # 專案依賴套件
-├── 類別圖.md             # 系統架構與類別圖文件
-├── README.md             # 專案說明文件
-└── LICENSE               # 授權條款
+├── shioaji_connector.py       # Shioaji 連線管理核心模組
+├── example_usage.py           # 基本使用範例程式
+├── contract_example.py        # 商品檔查詢範例程式（v2.0）
+├── quote_streaming_example.py # 即時報價訂閱範例（v3.0 新增）
+├── requirements.txt           # 專案依賴套件
+├── 類別圖.md                 # 系統架構與類別圖文件
+├── README.md                 # 專案說明文件
+└── LICENSE                   # 授權條款
 ```
 
 ## 🚀 快速開始
@@ -94,23 +97,34 @@ with ShioajiConnector(simulation=True) as connector:
 - `get_connection_status()` - 取得連線狀態
 - `__enter__()` / `__exit__()` - Context Manager 支援
 
-**商品檔查詢（v2.0 新增）：**
+**商品檔查詢（v2.0）：**
 - `get_contracts()` - 取得所有商品檔物件
 - `search_stock(keyword)` - 搜尋股票（關鍵字）
 - `get_stock_by_code(code)` - 精確查詢股票（代碼）
 - `search_futures(keyword)` - 搜尋期貨（關鍵字）
 - `get_contracts_summary()` - 取得商品統計摘要
 
+**即時報價訂閱（v3.0 新增）：**
+- `subscribe_quote(contract, quote_type)` - 訂閱即時報價
+- `unsubscribe_quote(contract)` - 取消訂閱報價
+- `set_quote_callback(callback, event_type)` - 設定報價回調函數
+- `get_subscribed_contracts()` - 取得已訂閱商品列表
+- `get_latest_quote(code)` - 取得最新報價快照
+- `clear_quote_callbacks(event_type)` - 清除回調函數
+
 **主要屬性：**
 
 - `sj` - Shioaji API 實例 (登入後可用)
 - `is_connected` - 連線狀態
 - `login_time` - 登入時間
-- `contracts` - 商品檔物件 (v2.0 新增)
+- `contracts` - 商品檔物件 (v2.0)
+- `subscribed_contracts` - 已訂閱商品字典 (v3.0 新增)
+- `quote_callbacks` - 報價回調函數字典 (v3.0 新增)
+- `quote_data` - 最新報價資料 (v3.0 新增)
 
 詳細的參數說明、返回值、異常處理請參考程式碼中的 docstring。
 
-## 🔍 商品檔查詢功能（v2.0 新增）
+## 🔍 商品檔查詢功能（v2.0）
 
 ### 基本商品查詢
 
@@ -193,8 +207,124 @@ print(status)
 #     'login_time': '2025-10-06 10:30:00',
 #     'simulation': True,
 #     'api_initialized': True,
-#     'contracts_loaded': True  # v2.0 新增
+#     'contracts_loaded': True,
+#     'subscribed_count': 2,  # v3.0 新增
+#     'callback_count': 1     # v3.0 新增
 # }
+```
+
+## 📡 即時報價訂閱功能（v3.0 新增）
+
+### 基本報價訂閱
+
+```python
+from shioaji_connector import ShioajiConnector
+
+connector = ShioajiConnector(simulation=True)
+connector.login(
+    person_id="YOUR_PERSON_ID",
+    passwd="YOUR_PASSWORD"
+)
+
+# 取得股票合約
+stock = connector.get_stock_by_code("2330")
+
+# 訂閱逐筆報價
+connector.subscribe_quote(stock, "tick")
+
+print("開始接收報價...")
+# 報價會透過 callback 自動推送
+
+# 取消訂閱
+connector.unsubscribe_quote(stock)
+```
+
+### 使用 Callback 處理報價
+
+```python
+import time
+from shioaji_connector import ShioajiConnector
+
+# 定義報價處理函數
+def quote_handler(topic, quote):
+    """"處理即時報價"""
+    print(f"商品: {topic}")
+    print(f"價格: {quote['close']}")
+    print(f"成交量: {quote['volume']}")
+    print(f"時間: {quote['datetime']}")
+    print("-" * 40)
+
+connector = ShioajiConnector(simulation=True)
+connector.login(
+    person_id="YOUR_PERSON_ID",
+    passwd="YOUR_PASSWORD"
+)
+
+# 註冊 callback
+connector.set_quote_callback(quote_handler, "tick")
+
+# 訂閱股票
+stock = connector.get_stock_by_code("2330")
+connector.subscribe_quote(stock, "tick")
+
+# 持續接收報價
+time.sleep(10)
+
+# 清理
+connector.unsubscribe_quote(stock)
+connector.logout()
+```
+
+### 訂閱多個股票
+
+```python
+# 訂閱多個股票
+stock_codes = ["2330", "2317", "2454"]
+
+for code in stock_codes:
+    stock = connector.get_stock_by_code(code)
+    if stock:
+        connector.subscribe_quote(stock, "tick")
+        print(f"✅ 已訂閱 {stock.code} {stock.name}")
+
+# 查看已訂閱的商品
+subscribed = connector.get_subscribed_contracts()
+print(f"目前訂閱 {len(subscribed)} 個商品")
+```
+
+### 取得最新報價快照
+
+```python
+# 訂閱後可以隨時取得最新報價
+quote = connector.get_latest_quote("2330")
+
+if quote:
+    print(f"最新價格: {quote['close']}")
+    print(f"成交量: {quote['volume']}")
+    print(f"時間: {quote['datetime']}")
+```
+
+### 多個 Callback 處理
+
+```python
+# 可以註冊多個 callback 來處理不同的邂輯
+
+def logger_callback(topic, quote):
+    """記錄日誌"""
+    print(f"[LOG] {quote['code']}: {quote['close']}")
+
+def alert_callback(topic, quote):
+    """價格警示"""
+    if quote['close'] > 600:
+        print(f"⚠️  [警告] 價格突破 600: {quote['close']}")
+
+# 註冊多個 callback
+connector.set_quote_callback(logger_callback, "tick")
+connector.set_quote_callback(alert_callback, "tick")
+
+# 訂閱後，兩個 callback 都會被呼叫
+stock = connector.get_stock_by_code("2330")
+connector.subscribe_quote(stock, "tick")
 ```
 
 ## 📖 使用範例
@@ -212,7 +342,7 @@ python example_usage.py
 4. 便利函數使用
 5. 錯誤處理
 
-### 商品檔查詢範例（v2.0 新增）
+### 商品檔查詢範例（v2.0）
 
 ```bash
 python contract_example.py
@@ -225,6 +355,21 @@ python contract_example.py
 4. 搜尋期貨
 5. 直接訪問 contracts 屬性
 6. 檢查連線狀態（包含商品檔狀態）
+
+### 即時報價訂閱範例（v3.0 新增）
+
+```bash
+python quote_streaming_example.py
+```
+
+範例包含：
+1. 基本報價訂閱
+2. 使用 Callback 處理報價
+3. 訂閱多個股票
+4. 訂閱五檔報價
+5. 取得最新報價快照
+6. 註冊多個 Callback
+7. 檢查連線狀態（含訂閱資訊）
 
 ## 🎯 設計原則
 
@@ -273,6 +418,23 @@ connector = ShioajiConnector(simulation=True)
 
 ## 📝 版本記錄
 
+### v3.0.0 (2025-10-06) - 即時報價訂閱與 Callback
+
+- ✅ 新增 `subscribed_contracts` 屬性儲存已訂閱商品
+- ✅ 新增 `quote_callbacks` 屬性管理回調函數
+- ✅ 新增 `quote_data` 屬性儲存最新報價
+- ✅ 實作 `subscribe_quote()` 訂閱即時報價
+- ✅ 實作 `unsubscribe_quote()` 取消訂閱
+- ✅ 實作 `set_quote_callback()` 設定報價回調函數
+- ✅ 實作 `get_subscribed_contracts()` 查詢已訂閱商品
+- ✅ 實作 `get_latest_quote()` 取得最新報價快照
+- ✅ 實作 `clear_quote_callbacks()` 清除回調函數
+- ✅ 支援 tick 和 bidask 兩種報價類型
+- ✅ 支援多個 callback 同時註冊
+- ✅ 更新類別圖加入報價訂閱架構
+- ✅ 新增 `quote_streaming_example.py` 報價訂閱範例
+- ✅ 完整的 callback 錯誤處理與日誌
+
 ### v2.0.0 (2025-10-06) - 商品檔管理功能
 
 - ✅ 新增 `contracts` 屬性儲存商品檔資料
@@ -320,5 +482,5 @@ connector = ShioajiConnector(simulation=True)
 ---
 
 **建立日期：** 2025-10-06  
-**版本：** 2.0.0 (商品檔管理功能)  
+**版本：** 3.0.0 (即時報價訂閱與 Callback)  
 **作者：** Trading System Team

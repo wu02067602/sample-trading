@@ -2,15 +2,16 @@
 Shioaji 交易連線管理模組
 
 此模組提供永豐金證券 Shioaji API 的連線管理功能，
-包含登入、登出、連線狀態管理以及商品檔查詢。
+包含登入、登出、連線狀態管理、商品檔查詢、即時報價訂閱以及事件回調處理。
 
 Author: Trading System Team
 Date: 2025-10-06
 """
 
 import logging
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List, Union, Callable
 from datetime import datetime
+from collections import defaultdict
 
 try:
     import shioaji as sj
@@ -33,6 +34,8 @@ class ShioajiConnector:
         is_connected (bool): 連線狀態
         login_time (datetime): 登入時間
         contracts (object): 商品檔物件，包含所有可交易的商品資訊
+        subscribed_contracts (Dict): 已訂閱的商品字典
+        quote_callbacks (Dict): 報價回調函數字典
         
     Examples:
         >>> connector = ShioajiConnector(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET")
@@ -80,6 +83,11 @@ class ShioajiConnector:
         self.is_connected: bool = False
         self.login_time: Optional[datetime] = None
         self.contracts: Optional[Any] = None
+        
+        # 訂閱報價相關屬性
+        self.subscribed_contracts: Dict[str, Any] = {}  # {code: contract}
+        self.quote_callbacks: Dict[str, List[Callable]] = defaultdict(list)  # {event_type: [callbacks]}
+        self.quote_data: Dict[str, Any] = {}  # {code: latest_quote}
         
         # 設置日誌
         self.logger = logging.getLogger(__name__)
@@ -532,7 +540,9 @@ class ShioajiConnector:
             'login_time': self.login_time.strftime('%Y-%m-%d %H:%M:%S') if self.login_time else None,
             'simulation': self.simulation,
             'api_initialized': self.sj is not None,
-            'contracts_loaded': self.contracts is not None
+            'contracts_loaded': self.contracts is not None,
+            'subscribed_count': len(self.subscribed_contracts),
+            'callback_count': sum(len(cbs) for cbs in self.quote_callbacks.values())
         }
     
     def __enter__(self):
@@ -554,6 +564,283 @@ class ShioajiConnector:
         if self.is_connected:
             self.logout()
         return False
+    
+    def subscribe_quote(self, contract: Any, quote_type: str = "tick") -> bool:
+        """
+        訂閱即時報價
+        
+        訂閱特定商品的即時報價，支援逐筆（tick）和快照（bidask）兩種類型。
+        
+        Args:
+            contract (Any): 商品合約物件（從 contracts 取得）
+            quote_type (str, optional): 報價類型，"tick" 或 "bidask"。預設為 "tick"。
+            
+        Returns:
+            bool: 訂閱成功返回 True，失敗返回 False
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當報價類型不正確時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> 
+            >>> # 訂閱逐筆報價
+            >>> connector.subscribe_quote(stock, "tick")
+            >>> 
+            >>> # 訂閱五檔報價
+            >>> connector.subscribe_quote(stock, "bidask")
+            
+        Note:
+            - 需要先登入才能訂閱
+            - tick: 逐筆成交報價
+            - bidask: 五檔委買委賣報價
+            - 訂閱後會自動呼叫已註冊的 callback 函數
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if quote_type not in ["tick", "bidask"]:
+            raise ValueError("報價類型必須是 'tick' 或 'bidask'")
+        
+        try:
+            # 訂閱報價
+            if quote_type == "tick":
+                self.sj.quote.subscribe(
+                    contract,
+                    quote_type=sj.constant.QuoteType.Tick,
+                    version=sj.constant.QuoteVersion.v1
+                )
+            else:  # bidask
+                self.sj.quote.subscribe(
+                    contract,
+                    quote_type=sj.constant.QuoteType.BidAsk,
+                    version=sj.constant.QuoteVersion.v1
+                )
+            
+            # 記錄已訂閱的商品
+            self.subscribed_contracts[contract.code] = contract
+            self.logger.info(f"訂閱報價成功: {contract.code} {contract.name} (類型: {quote_type})")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"訂閱報價失敗: {str(e)}")
+            return False
+    
+    def unsubscribe_quote(self, contract: Any) -> bool:
+        """
+        取消訂閱即時報價
+        
+        取消訂閱特定商品的即時報價。
+        
+        Args:
+            contract (Any): 商品合約物件
+            
+        Returns:
+            bool: 取消訂閱成功返回 True，失敗返回 False
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> connector.subscribe_quote(stock)
+            >>> # ... 接收報價 ...
+            >>> connector.unsubscribe_quote(stock)
+            
+        Note:
+            - 取消訂閱後將不再接收該商品的報價更新
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        try:
+            self.sj.quote.unsubscribe(
+                contract,
+                quote_type=sj.constant.QuoteType.Tick,
+                version=sj.constant.QuoteVersion.v1
+            )
+            
+            # 移除訂閱記錄
+            if contract.code in self.subscribed_contracts:
+                del self.subscribed_contracts[contract.code]
+            
+            self.logger.info(f"取消訂閱報價: {contract.code} {contract.name}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"取消訂閱報價失敗: {str(e)}")
+            return False
+    
+    def set_quote_callback(self, callback: Callable, event_type: str = "tick") -> None:
+        """
+        設定報價回調函數
+        
+        註冊一個回調函數，當接收到報價更新時會被呼叫。
+        支援多個 callback 函數同時註冊。
+        
+        Args:
+            callback (Callable): 回調函數，接收兩個參數：
+                - topic (str): 報價主題
+                - quote (dict): 報價資料
+            event_type (str, optional): 事件類型，"tick" 或 "bidask"。預設為 "tick"。
+            
+        Raises:
+            ConnectionError: 當尚未登入時拋出
+            ValueError: 當 callback 不是可呼叫的函數時拋出
+            
+        Examples:
+            >>> def my_quote_handler(topic, quote):
+            >>>     print(f"商品: {topic}")
+            >>>     print(f"價格: {quote['close']}")
+            >>>     print(f"成交量: {quote['volume']}")
+            >>> 
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_quote_callback(my_quote_handler, "tick")
+            >>> 
+            >>> # 訂閱股票後，會自動呼叫 my_quote_handler
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> connector.subscribe_quote(stock)
+            
+        Note:
+            - callback 函數會在報價更新時被呼叫
+            - 支援註冊多個 callback 函數
+            - callback 應該快速執行，避免阻塞主程序
+            - quote 資料結構依報價類型而異
+        """
+        if not self.is_connected:
+            raise ConnectionError("尚未登入，請先執行 login()")
+        
+        if not callable(callback):
+            raise ValueError("callback 必須是可呼叫的函數")
+        
+        # 註冊 callback
+        self.quote_callbacks[event_type].append(callback)
+        
+        # 設定 Shioaji 的 callback
+        if event_type == "tick":
+            @self.sj.on_tick_stk_v1()
+            def quote_callback(exchange, tick):
+                """內部 tick 報價處理函數"""
+                try:
+                    # 更新最新報價資料
+                    code = tick['code']
+                    self.quote_data[code] = tick
+                    
+                    # 呼叫所有註冊的 callback
+                    for cb in self.quote_callbacks['tick']:
+                        try:
+                            cb(f"{exchange}/{code}", tick)
+                        except Exception as e:
+                            self.logger.error(f"執行 callback 時發生錯誤: {str(e)}")
+                except Exception as e:
+                    self.logger.error(f"處理 tick 報價時發生錯誤: {str(e)}")
+        
+        elif event_type == "bidask":
+            @self.sj.on_bidask_stk_v1()
+            def bidask_callback(exchange, bidask):
+                """內部 bidask 報價處理函數"""
+                try:
+                    # 更新最新報價資料
+                    code = bidask['code']
+                    self.quote_data[code] = bidask
+                    
+                    # 呼叫所有註冊的 callback
+                    for cb in self.quote_callbacks['bidask']:
+                        try:
+                            cb(f"{exchange}/{code}", bidask)
+                        except Exception as e:
+                            self.logger.error(f"執行 callback 時發生錯誤: {str(e)}")
+                except Exception as e:
+                    self.logger.error(f"處理 bidask 報價時發生錯誤: {str(e)}")
+        
+        self.logger.info(f"已註冊 {event_type} 報價回調函數")
+    
+    def get_subscribed_contracts(self) -> Dict[str, Any]:
+        """
+        取得已訂閱的商品列表
+        
+        Returns:
+            Dict[str, Any]: 已訂閱的商品字典 {code: contract}
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> connector.subscribe_quote(stock)
+            >>> 
+            >>> subscribed = connector.get_subscribed_contracts()
+            >>> print(f"已訂閱 {len(subscribed)} 個商品")
+            >>> for code, contract in subscribed.items():
+            >>>     print(f"{code}: {contract.name}")
+        """
+        return self.subscribed_contracts.copy()
+    
+    def get_latest_quote(self, code: str) -> Optional[Dict[str, Any]]:
+        """
+        取得最新報價資料
+        
+        取得指定商品代碼的最新報價快照。
+        
+        Args:
+            code (str): 商品代碼
+            
+        Returns:
+            Optional[Dict[str, Any]]: 最新報價資料，若無資料則返回 None
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> stock = connector.get_stock_by_code("2330")
+            >>> connector.subscribe_quote(stock)
+            >>> 
+            >>> # 等待接收報價...
+            >>> import time
+            >>> time.sleep(2)
+            >>> 
+            >>> quote = connector.get_latest_quote("2330")
+            >>> if quote:
+            >>>     print(f"最新價格: {quote['close']}")
+            >>>     print(f"成交量: {quote['volume']}")
+            
+        Note:
+            - 需要先訂閱該商品才能取得報價
+            - 返回的是快照資料，不是即時串流
+        """
+        return self.quote_data.get(code)
+    
+    def clear_quote_callbacks(self, event_type: Optional[str] = None) -> None:
+        """
+        清除報價回調函數
+        
+        清除已註冊的回調函數。
+        
+        Args:
+            event_type (str, optional): 要清除的事件類型，若為 None 則清除所有。
+                預設為 None。
+            
+        Examples:
+            >>> connector = ShioajiConnector()
+            >>> connector.login(person_id="A123456789", passwd="password")
+            >>> connector.set_quote_callback(my_handler)
+            >>> 
+            >>> # 清除特定類型的 callback
+            >>> connector.clear_quote_callbacks("tick")
+            >>> 
+            >>> # 清除所有 callback
+            >>> connector.clear_quote_callbacks()
+        """
+        if event_type:
+            self.quote_callbacks[event_type].clear()
+            self.logger.info(f"已清除 {event_type} 類型的回調函數")
+        else:
+            self.quote_callbacks.clear()
+            self.logger.info("已清除所有回調函數")
     
     def __repr__(self) -> str:
         """
