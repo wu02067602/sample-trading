@@ -4,6 +4,11 @@
 
 import unittest
 from unittest.mock import Mock, patch, MagicMock
+import sys
+
+# Mock shioaji module before importing ShioajiBroker
+sys.modules['shioaji'] = MagicMock()
+
 from src.broker.shioaji_broker import ShioajiBroker
 from src.broker.order_callback_handler import OrderCallbackHandler
 
@@ -46,7 +51,7 @@ class TestShioajiBroker(unittest.TestCase):
     @patch('src.broker.shioaji_broker.sj.Shioaji')
     def test_connect_failure(self, mock_shioaji):
         """測試連線失敗"""
-        mock_shioaji.side_effect = Exception("Connection failed")
+        mock_shioaji.side_effect = ConnectionError("Connection failed")
         
         with self.assertRaises(ConnectionError):
             self.broker.connect("test_key", "test_secret")
