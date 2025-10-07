@@ -5,7 +5,7 @@
 
 import shioaji as sj
 from typing import Optional
-
+from config import Config
 
 class Login:
     """負責使用者驗證與身份認證
@@ -14,11 +14,12 @@ class Login:
     登入成功後，API 物件會被保存為實例屬性供後續使用。
     """
     
-    def __init__(self) -> None:
+    def __init__(self, config: Config) -> None:
         """初始化登入物件"""
         self.sj: Optional[sj.Shioaji] = None
+        self.config = config
     
-    def login(self, api_key: str, secret_key: str) -> sj.Shioaji:
+    def login(self) -> sj.Shioaji:
         """執行登入操作
         
         使用 API Key 和 Secret Key 進行身份驗證，並建立 Shioaji API 連線。
@@ -31,31 +32,16 @@ class Login:
             sj.Shioaji: 已登入的 Shioaji API 物件
         
         Examples:
-            >>> login_service = Login()
-            >>> api = login_service.login(
-            ...     api_key="YOUR_API_KEY",
-            ...     secret_key="YOUR_SECRET_KEY"
-            ... )
+            >>> login_service = Login(config)
+            >>> api = login_service.login()
             >>> print(f"登入成功: {api.login}")
-        
-        Raises:
-            ValueError: 當 api_key 或 secret_key 為空字串時
-            ConnectionError: 當無法連線到永豐 API 伺服器時
-            AuthenticationError: 當 API Key 或 Secret Key 驗證失敗時
         """
-        if not api_key:
-            raise ValueError("API Key 不可為空")
-        if not secret_key:
-            raise ValueError("Secret Key 不可為空")
-        
         try:
-            # 建立 Shioaji API 物件
-            self.sj = sj.Shioaji()
+            self.sj = sj.Shioaji(simulation=self.config.simulation)
             
-            # 執行登入
             self.sj.login(
-                api_key=api_key,
-                secret_key=secret_key
+                api_key=self.config.api_key,
+                secret_key=self.config.api_secret
             )
             
             return self.sj
@@ -63,29 +49,11 @@ class Login:
         except ConnectionError as e:
             raise ConnectionError(f"無法連線到永豐 API 伺服器: {e}")
         except (ValueError, KeyError) as e:
-            # Shioaji 在驗證失敗時可能拋出 ValueError 或 KeyError
             raise AuthenticationError(f"API Key 或 Secret Key 驗證失敗: {e}")
         except OSError as e:
-            # 網路相關錯誤
             raise ConnectionError(f"網路連線錯誤: {e}")
     
     def is_logged_in(self) -> bool:
-        """檢查是否已登入
-        
-        Returns:
-            bool: 如果已成功登入則返回 True，否則返回 False
-        
-        Examples:
-            >>> login_service = Login()
-            >>> login_service.is_logged_in()
-            False
-            >>> login_service.login(api_key="...", secret_key="...")
-            >>> login_service.is_logged_in()
-            True
-        
-        Raises:
-            此方法不會拋出任何錯誤
-        """
         return self.sj is not None
     
     def logout(self) -> None:
@@ -94,8 +62,8 @@ class Login:
         執行登出操作並釋放 API 連線資源。
         
         Examples:
-            >>> login_service = Login()
-            >>> login_service.login(api_key="...", secret_key="...")
+            >>> login_service = Login(config)
+            >>> login_service.login()
             >>> login_service.logout()
             >>> login_service.is_logged_in()
             False

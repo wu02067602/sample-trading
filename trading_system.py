@@ -19,6 +19,7 @@ from strategy import MomentumStrategy, TradingSignal
 from order_executor import OrderExecutor
 from trade_monitor import TradeMonitor
 from account_manager import AccountManager
+from config import Config
 
 
 class TradingSystem:
@@ -52,7 +53,7 @@ class TradingSystem:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
     
-    def initialize(self, api_key: str, secret_key: str) -> None:
+    def initialize(self, config: Config) -> None:
         """初始化系統並登入
         
         Args:
@@ -61,7 +62,7 @@ class TradingSystem:
         
         Examples:
             >>> system = TradingSystem()
-            >>> system.initialize(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
+            >>> system.initialize(config)
         
         Raises:
             ValueError: 當 api_key 或 secret_key 為空時
@@ -74,7 +75,7 @@ class TradingSystem:
         self._logger.info("開始初始化交易系統...")
         
         # 步驟 1: 登入
-        self._login_to_system(api_key, secret_key)
+        self._login_to_system(config)
         
         # 步驟 2: 取得商品檔
         self._fetch_contracts()
@@ -85,12 +86,11 @@ class TradingSystem:
         self._is_initialized = True
         self._logger.info("交易系統初始化完成")
     
-    def _login_to_system(self, api_key: str, secret_key: str) -> None:
+    def _login_to_system(self, config: Config) -> None:
         """登入系統（內部方法）
         
         Args:
-            api_key (str): API 金鑰
-            secret_key (str): API 密鑰
+            config (Config): 配置物件
         
         Raises:
             ValueError: 當登入參數無效時
@@ -98,8 +98,8 @@ class TradingSystem:
         """
         self._logger.info("步驟 1/3: 執行登入...")
         
-        self._login = Login()
-        self._api = self._login.login(api_key, secret_key)
+        self._login = Login(config)
+        self._api = self._login.login()
         
         self._logger.info("登入成功")
     
@@ -169,7 +169,7 @@ class TradingSystem:
         
         Examples:
             >>> system = TradingSystem()
-            >>> system.initialize(api_key="...", secret_key="...")
+            >>> system.initialize(config)
             >>> ranking = system.get_market_ranking(count=50)
         
         Raises:
@@ -198,7 +198,7 @@ class TradingSystem:
         
         Examples:
             >>> system = TradingSystem()
-            >>> system.initialize(api_key="...", secret_key="...")
+            >>> system.initialize(config)
             >>> system.start_data_preparation(interval_seconds=600, count=50)
         
         Raises:
@@ -233,7 +233,7 @@ class TradingSystem:
         
         Examples:
             >>> system = TradingSystem()
-            >>> system.initialize(api_key="...", secret_key="...")
+            >>> system.initialize(config)
             >>> subscribed = system.subscribe_stocks_by_change_percent(threshold=4.0)
         
         Raises:
@@ -290,7 +290,7 @@ class TradingSystem:
         
         Examples:
             >>> system = TradingSystem()
-            >>> system.initialize(api_key="...", secret_key="...")
+            >>> system.initialize(config)
             >>> system.register_signal_handler()  # 使用預設處理器
         
         Raises:

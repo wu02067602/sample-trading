@@ -186,6 +186,15 @@ class Config:
         """
         return self.get_required('CA_PATH')
     
+    @property
+    def simulation(self) -> bool:
+        """取得模擬環境
+        
+        Returns:
+            bool: 模擬環境
+        """
+        return self.get_required('SIMULATION')
+    
     def validate(self) -> bool:
         """驗證所有必要的環境變數是否已設定
         
