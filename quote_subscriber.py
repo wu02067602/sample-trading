@@ -4,8 +4,7 @@
 """
 
 import shioaji as sj
-from typing import Optional, List, Callable, Any, Dict
-from datetime import datetime
+from typing import List, Any
 
 
 class QuoteSubscriber:

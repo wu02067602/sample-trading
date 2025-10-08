@@ -5,7 +5,7 @@
 
 import shioaji as sj
 from typing import Optional, Any, Dict, List
-from datetime import datetime, time
+from datetime import datetime
 import logging
 import time as time_module
 

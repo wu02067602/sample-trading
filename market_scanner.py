@@ -4,7 +4,7 @@
 """
 
 import shioaji as sj
-from typing import List, Optional, Callable, Any
+from typing import List, Optional, Any
 from datetime import datetime
 
 

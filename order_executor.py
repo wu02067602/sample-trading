@@ -5,7 +5,6 @@
 
 import shioaji as sj
 from typing import Optional, Any
-from datetime import datetime
 
 
 class OrderExecutor:

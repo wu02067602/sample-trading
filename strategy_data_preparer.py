@@ -4,8 +4,8 @@
 """
 
 import shioaji as sj
-from typing import List, Optional, Any, Dict, Callable
-from datetime import datetime, timedelta
+from typing import List, Optional, Any, Dict
+from datetime import datetime
 import threading
 import logging
 

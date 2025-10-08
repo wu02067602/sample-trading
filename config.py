@@ -3,7 +3,6 @@
 此模組負責讀取與管理環境變數配置。
 """
 
-import os
 from typing import Optional
 from pathlib import Path
 

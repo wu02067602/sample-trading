@@ -3,7 +3,6 @@
 此模組負責實現交易策略邏輯與決策。
 """
 
-import shioaji as sj
 from typing import Optional, Any, Dict, List, Callable
 from datetime import datetime
 import logging
