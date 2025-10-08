@@ -252,27 +252,39 @@ class TradingSystem:
         subscribed_count = 0
         for stock in ranking:
             try:
-                # 檢查是否有漲跌幅屬性
-                change_percent = getattr(stock, 'change_percent', None)
+                # 使用 MarketScanner 計算漲跌幅百分比
+                change_percent = self._market_scanner.calculate_change_percent(stock)
                 if change_percent is None:
+                    self._logger.debug(f"無法計算股票 {getattr(stock, 'code', 'N/A')} 的漲跌幅")
+                    continue
+                
+                stock_code = getattr(stock, 'code', None)
+                if stock_code is None:
+                    self._logger.debug(f"股票資料缺少代碼屬性")
                     continue
                 
                 # 如果漲幅大於閾值且尚未訂閱
-                if change_percent > threshold and stock.code not in self._subscribed_stocks:
+                if change_percent > threshold and stock_code not in self._subscribed_stocks:
                     # 取得股票合約
-                    contract = self._contract_manager.get_stock(stock.code)
+                    contract = self._contract_manager.get_stock(stock_code)
                     if contract is not None:
                         # 訂閱報價
                         success = self._quote_subscriber.subscribe(contract)
                         if success:
-                            self._subscribed_stocks.append(stock.code)
+                            self._subscribed_stocks.append(stock_code)
                             subscribed_count += 1
+                            stock_name = getattr(stock, 'name', stock_code)
                             self._logger.info(
-                                f"訂閱股票 {stock.code}（漲幅 {change_percent:.2f}%）"
+                                f"訂閱股票 {stock_name} ({stock_code})（漲幅 {change_percent:.2f}%）"
                             )
+                    else:
+                        self._logger.warning(f"無法取得股票 {stock_code} 的合約")
             
             except AttributeError as e:
                 self._logger.warning(f"無法處理股票資料: {e}")
+                continue
+            except (ValueError, ConnectionError) as e:
+                self._logger.warning(f"訂閱失敗: {e}")
                 continue
         
         self._logger.info(f"共訂閱 {subscribed_count} 支股票報價")

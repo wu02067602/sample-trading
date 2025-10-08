@@ -362,3 +362,63 @@ class MarketScanner:
             此方法不會拋出任何錯誤
         """
         return self._last_scan_time
+    
+    def calculate_change_percent(self, stock: Any) -> Optional[float]:
+        """從 scanner 返回的股票資料計算漲跌幅百分比
+        
+        此方法嘗試從 shioaji scanners 返回的股票物件中提取或計算漲跌幅百分比。
+        由於 scanners 返回的物件結構可能不同，此方法會嘗試多種方式來取得漲跌幅。
+        
+        Args:
+            stock (Any): Scanner 返回的股票資料物件
+        
+        Returns:
+            Optional[float]: 漲跌幅百分比，如果無法計算則返回 None
+        
+        Examples:
+            >>> scanner = MarketScanner(api)
+            >>> ranking = scanner.get_change_percent_rank(count=10)
+            >>> for stock in ranking:
+            ...     change_percent = scanner.calculate_change_percent(stock)
+            ...     if change_percent is not None:
+            ...         print(f"{stock.name}: {change_percent:.2f}%")
+        
+        Raises:
+            此方法不會拋出任何錯誤
+        """
+        try:
+            # 嘗試直接取得 change_percent 屬性（如果有的話）
+            if hasattr(stock, 'change_percent'):
+                return float(getattr(stock, 'change_percent'))
+            
+            # 如果沒有 change_percent，嘗試從其他屬性計算
+            # shioaji scanners 可能返回 ts (時間序列數據)
+            if hasattr(stock, 'ts'):
+                ts_data = getattr(stock, 'ts')
+                if hasattr(ts_data, 'change_percent'):
+                    return float(getattr(ts_data, 'change_percent'))
+                
+                # 嘗試從 close 和 change_price 計算
+                if hasattr(ts_data, 'close') and hasattr(ts_data, 'change_price'):
+                    close = float(getattr(ts_data, 'close', 0))
+                    change_price = float(getattr(ts_data, 'change_price', 0))
+                    if close > 0:
+                        reference_price = close - change_price
+                        if reference_price > 0:
+                            change_percent = (change_price / reference_price) * 100
+                            return change_percent
+            
+            # 直接從股票物件嘗試計算
+            if hasattr(stock, 'close') and hasattr(stock, 'change_price'):
+                close = float(getattr(stock, 'close', 0))
+                change_price = float(getattr(stock, 'change_price', 0))
+                if close > 0:
+                    reference_price = close - change_price
+                    if reference_price > 0:
+                        change_percent = (change_price / reference_price) * 100
+                        return change_percent
+            
+            return None
+            
+        except (ValueError, TypeError, ZeroDivisionError):
+            return None
