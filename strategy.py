@@ -162,9 +162,11 @@ class MomentumStrategy:
                 return
             
             code = tick.code
+            self._logger.info(f"[策略] 處理股票 {code} 的報價")
             
             # 如果這支股票已經產生過訊號，跳過
             if self._monitored_stocks.get(code, False):
+                self._logger.debug(f"股票 {code} 已產生過訊號，跳過")
                 return
             
             # 檢查是否符合策略條件
@@ -181,6 +183,15 @@ class MomentumStrategy:
                         callback(signal)
                     except Exception as e:
                         self._logger.error(f"執行訊號回調失敗: {e}")
+            else:
+                # 記錄不符合條件的原因
+                change_percent = self._calculate_change_percent(tick)
+                volume_lots = self._get_volume_in_lots(tick)
+                self._logger.info(
+                    f"股票 {code} 不符合策略條件 - "
+                    f"漲幅: {change_percent:.2f}% (閾值: {self._change_percent_threshold}%), "
+                    f"成交量: {volume_lots} 張 (閾值: {self._volume_threshold} 張)"
+                )
         
         except AttributeError as e:
             self._logger.error(f"報價資料格式錯誤: {e}")
@@ -212,9 +223,10 @@ class MomentumStrategy:
             meets_volume = volume_lots > self._volume_threshold
             
             if meets_change and meets_volume:
-                self._logger.debug(
-                    f"股票 {tick.code} 符合條件 - "
-                    f"漲幅: {change_percent:.2f}%, 成交量: {volume_lots} 張"
+                self._logger.info(
+                    f"股票 {tick.code} 符合策略條件！ - "
+                    f"漲幅: {change_percent:.2f}% > {self._change_percent_threshold}%, "
+                    f"成交量: {volume_lots} 張 > {self._volume_threshold} 張"
                 )
                 return True
             

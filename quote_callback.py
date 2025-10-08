@@ -33,11 +33,13 @@ class QuoteCallback:
         self._order_callbacks: List[Callable] = []
         self._latest_quotes: Dict[str, Any] = {}
         self._logger = logging.getLogger(__name__)
+        self._callback_registered: bool = False
     
     def set_quote_callback(self, callback: Callable[[str, Any], None]) -> None:
         """設定報價回調函數
         
         註冊一個回調函數，當收到報價資料時會被呼叫。
+        支援多個回調函數，所有已註冊的回調都會被觸發。
         
         Args:
             callback (Callable[[str, Any], None]): 
@@ -58,28 +60,43 @@ class QuoteCallback:
         if not callable(callback):
             raise ValueError("Callback 必須是可呼叫的函數")
         
-        # 包裝使用者的回調函數
-        def wrapped_callback(exchange: str, tick: Any) -> None:
-            """包裝的回調函數，用於儲存最新報價並呼叫使用者函數"""
-            try:
-                # 儲存最新報價
-                self._latest_quotes[tick.code] = {
-                    'exchange': exchange,
-                    'tick': tick,
-                    'timestamp': datetime.now()
-                }
-                
-                # 呼叫使用者的回調函數
-                callback(exchange, tick)
-                
-            except AttributeError as e:
-                self._logger.error(f"報價資料格式錯誤: {e}")
-            except KeyError as e:
-                self._logger.error(f"報價資料缺少必要欄位: {e}")
-        
-        # 註冊到 API
-        self._api.quote.set_on_tick_stk_v1_callback(wrapped_callback)
+        # 將回調添加到列表中
         self._quote_callbacks.append(callback)
+        self._logger.info(f"已註冊報價回調函數，目前共 {len(self._quote_callbacks)} 個回調")
+        
+        # 只在第一次註冊時設定 API callback
+        if not self._callback_registered:
+            def master_callback(exchange: str, tick: Any) -> None:
+                """主回調函數，用於呼叫所有已註冊的使用者回調"""
+                try:
+                    code = getattr(tick, 'code', 'N/A')
+                    close = getattr(tick, 'close', 'N/A')
+                    # 記錄收到報價
+                    self._logger.info(f"[QuoteCallback] 收到報價更新: {code} @ {close}")
+                    
+                    # 儲存最新報價
+                    self._latest_quotes[tick.code] = {
+                        'exchange': exchange,
+                        'tick': tick,
+                        'timestamp': datetime.now()
+                    }
+                    
+                    # 呼叫所有已註冊的使用者回調函數
+                    for user_callback in self._quote_callbacks:
+                        try:
+                            user_callback(exchange, tick)
+                        except Exception as e:
+                            self._logger.error(f"呼叫使用者回調函數時發生錯誤: {e}")
+                    
+                except AttributeError as e:
+                    self._logger.error(f"報價資料格式錯誤: {e}")
+                except KeyError as e:
+                    self._logger.error(f"報價資料缺少必要欄位: {e}")
+            
+            # 註冊主回調到 API
+            self._api.quote.set_on_tick_stk_v1_callback(master_callback)
+            self._callback_registered = True
+            self._logger.info("主回調函數已註冊到 Shioaji API")
     
     def set_order_callback(self, callback: Callable[[Any, Any], None]) -> None:
         """設定委託回報回調函數
