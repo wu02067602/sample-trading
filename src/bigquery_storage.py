@@ -183,18 +183,22 @@ class BigQueryStorage:
         
         # 準備資料
         df_to_insert = df[required_columns].copy()
-        
+
+        # 將時間戳轉換為 UTC 時間
+        df_to_insert['ts'] = df_to_insert['ts'].dt.tz_localize('Asia/Taipei').dt.tz_convert('UTC')
+        logger.info("已將 ts 欄位從台灣時間轉換為 UTC")
+
         # 設定寫入配置
         job_config = bigquery.LoadJobConfig(
             write_disposition=write_disposition,
             schema=[
-                bigquery.SchemaField("ts", "TIMESTAMP"),
-                bigquery.SchemaField("stock_code", "STRING"),
-                bigquery.SchemaField("Open", "FLOAT64"),
-                bigquery.SchemaField("High", "FLOAT64"),
-                bigquery.SchemaField("Low", "FLOAT64"),
-                bigquery.SchemaField("Close", "FLOAT64"),
-                bigquery.SchemaField("Volume", "INT64"),
+                bigquery.SchemaField("ts", "TIMESTAMP", mode="REQUIRED"),
+                bigquery.SchemaField("stock_code", "STRING", mode="REQUIRED"),
+                bigquery.SchemaField("Open", "FLOAT64", mode="REQUIRED"),
+                bigquery.SchemaField("High", "FLOAT64", mode="REQUIRED"),
+                bigquery.SchemaField("Low", "FLOAT64", mode="REQUIRED"),
+                bigquery.SchemaField("Close", "FLOAT64", mode="REQUIRED"),
+                bigquery.SchemaField("Volume", "INT64", mode="REQUIRED"),
             ]
         )
         
