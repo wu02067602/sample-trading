@@ -43,7 +43,7 @@ class SinotradeClient:
             
         Examples:
             >>> client = SinotradeClient(simulation=True)
-            >>> client.login("A123456789", "password")
+            >>> client.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
             True
             
         Raises:
@@ -65,26 +65,30 @@ class SinotradeClient:
     
     def login(
         self,
-        person_id: str,
-        passwd: str,
+        api_key: str,
+        secret_key: str,
         subscribe_trade: bool = True,
-        contracts_timeout: int = 30000
+        contracts_timeout: int = 0,
+        receive_window: int = 30000,
+        fetch_contract: bool = True
     ) -> bool:
         """
         登入永豐金證券帳號
         
         Args:
-            person_id (str): 使用者身份證字號
-            passwd (str): 使用者密碼
-            subscribe_trade (bool): 是否訂閱交易資訊，預設為 True
-            contracts_timeout (int): 契約超時時間（毫秒），預設為 30000
+            api_key (str): API 金鑰
+            secret_key (str): 密鑰
+            subscribe_trade (bool): 是否訂閱委託/成交回報，預設為 True
+            contracts_timeout (int): 獲取商品檔 timeout（毫秒），預設為 0
+            receive_window (int): 登入動作有效執行時間（毫秒），預設為 30000
+            fetch_contract (bool): 是否從快取中讀取商品檔或從伺服器下載商品檔，預設為 True
             
         Returns:
             bool: 登入成功返回 True，失敗返回 False
             
         Examples:
             >>> client = SinotradeClient()
-            >>> client.login("A123456789", "password")
+            >>> client.login(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
             True
             
         Raises:
@@ -92,11 +96,13 @@ class SinotradeClient:
             ConnectionError: 當無法連接到永豐金證券伺服器時
             RuntimeError: 當登入過程發生錯誤時
         """
-        credentials = LoginCredentials(person_id=person_id, passwd=passwd)
+        credentials = LoginCredentials(api_key=api_key, secret_key=secret_key)
         return self._auth_service.login(
             credentials=credentials,
             subscribe_trade=subscribe_trade,
-            contracts_timeout=contracts_timeout
+            contracts_timeout=contracts_timeout,
+            receive_window=receive_window,
+            fetch_contract=fetch_contract
         )
     
     def logout(self) -> bool:

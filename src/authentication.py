@@ -18,18 +18,18 @@ class LoginCredentials:
     登入憑證資料類別
     
     Attributes:
-        person_id (str): 使用者身份證字號
-        passwd (str): 使用者密碼
+        api_key (str): API 金鑰
+        secret_key (str): 密鑰
     """
-    person_id: str
-    passwd: str
+    api_key: str
+    secret_key: str
     
     def __post_init__(self) -> None:
         """驗證登入憑證的有效性"""
-        if not self.person_id or not isinstance(self.person_id, str):
-            raise ValueError("person_id 必須為非空字串")
-        if not self.passwd or not isinstance(self.passwd, str):
-            raise ValueError("passwd 必須為非空字串")
+        if not self.api_key or not isinstance(self.api_key, str):
+            raise ValueError("api_key 必須為非空字串")
+        if not self.secret_key or not isinstance(self.secret_key, str):
+            raise ValueError("secret_key 必須為非空字串")
 
 
 class AuthenticationService:
@@ -67,46 +67,53 @@ class AuthenticationService:
         credentials: LoginCredentials,
         contracts_cb: Optional[Callable] = None,
         subscribe_trade: bool = True,
-        contracts_timeout: int = 30000
+        contracts_timeout: int = 0,
+        receive_window: int = 30000,
+        fetch_contract: bool = True
     ) -> bool:
         """
         執行登入操作
         
         Args:
-            credentials (LoginCredentials): 登入憑證資料
-            contracts_cb (Optional[Callable]): 契約回調函數
-            subscribe_trade (bool): 是否訂閱交易資訊，預設為 True
-            contracts_timeout (int): 契約超時時間（毫秒），預設為 30000
+            credentials (LoginCredentials): 登入憑證資料（包含 api_key 和 secret_key）
+            contracts_cb (Optional[Callable]): 獲取商品檔 callback 函數
+            subscribe_trade (bool): 是否訂閱委託/成交回報，預設為 True
+            contracts_timeout (int): 獲取商品檔 timeout（毫秒），預設為 0
+            receive_window (int): 登入動作有效執行時間（毫秒），預設為 30000
+            fetch_contract (bool): 是否從快取中讀取商品檔或從伺服器下載商品檔，預設為 True
             
         Returns:
             bool: 登入成功返回 True，失敗返回 False
             
         Examples:
-            >>> credentials = LoginCredentials(person_id="A123456789", passwd="password")
+            >>> credentials = LoginCredentials(api_key="YOUR_API_KEY", secret_key="YOUR_SECRET_KEY")
             >>> auth_service = AuthenticationService(api)
             >>> auth_service.login(credentials)
             True
             
         Raises:
             ValueError: 當 credentials 無效時
+            ValueError: 當 receive_window 小於等於 0 時
             ConnectionError: 當無法連接到永豐金證券伺服器時
             RuntimeError: 當登入過程發生錯誤時
         """
         if not isinstance(credentials, LoginCredentials):
             raise ValueError("credentials 必須是 LoginCredentials 實例")
         
-        if contracts_timeout <= 0:
-            raise ValueError("contracts_timeout 必須為正整數")
+        if receive_window <= 0:
+            raise ValueError("receive_window 必須為正整數")
         
         try:
-            logger.info(f"嘗試登入，使用者: {credentials.person_id}")
+            logger.info("嘗試登入永豐金證券 API")
             
             self._api.login(
-                person_id=credentials.person_id,
-                passwd=credentials.passwd,
+                api_key=credentials.api_key,
+                secret_key=credentials.secret_key,
+                fetch_contract=fetch_contract,
+                contracts_timeout=contracts_timeout,
                 contracts_cb=contracts_cb,
                 subscribe_trade=subscribe_trade,
-                contracts_timeout=contracts_timeout
+                receive_window=receive_window
             )
             
             self._is_logged_in = True
@@ -119,6 +126,9 @@ class AuthenticationService:
         except RuntimeError as e:
             logger.error(f"登入失敗: {e}")
             raise RuntimeError(f"登入過程發生錯誤: {e}")
+        except ValueError as e:
+            logger.error(f"登入參數錯誤: {e}")
+            raise ValueError(f"登入參數錯誤: {e}")
     
     def logout(self) -> bool:
         """
