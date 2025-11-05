@@ -4,12 +4,14 @@
 此模組負責從永豐金證券 API 抓取股票的歷史交易資料。
 """
 
-from typing import List, Optional, Dict
-from datetime import datetime, date
+from typing import List, Optional
+from datetime import datetime
 import shioaji as sj
 import pandas as pd
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass 
+import time
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,10 @@ class MarketDataFetcher:
             raise TypeError("api 必須是 Shioaji 實例")
         
         self._api = api
+        # 速率限制：5 秒內最多 25 次查詢
+        self._rate_limit_window = 5.0  # 秒
+        self._rate_limit_max_requests = 25
+        self._request_timestamps: deque = deque()
         logger.info("市場資料抓取服務已初始化")
     
     def get_all_stock_symbols(self) -> List[str]:
@@ -189,6 +195,44 @@ class MarketDataFetcher:
             logger.error(f"抓取 {stock_code} 資料失敗: {e}")
             raise RuntimeError(f"資料抓取失敗: {e}")
     
+    def _wait_for_rate_limit(self) -> None:
+        """
+        等待速率限制允許下一次查詢
+        
+        此方法會檢查過去 5 秒內的查詢次數，如果已達到上限（25 次），
+        則等待直到有查詢配額可用。
+        
+        Examples:
+            >>> fetcher = MarketDataFetcher(api)
+            >>> fetcher._wait_for_rate_limit()  # 等待（如果需要）
+        
+        Raises:
+            無
+        """
+        current_time = time.time()
+        
+        # 移除超過時間視窗的舊請求時間戳
+        while self._request_timestamps and \
+              current_time - self._request_timestamps[0] >= self._rate_limit_window:
+            self._request_timestamps.popleft()
+        
+        # 如果已達到速率限制，等待
+        if len(self._request_timestamps) >= self._rate_limit_max_requests:
+            oldest_request_time = self._request_timestamps[0]
+            wait_time = self._rate_limit_window - (current_time - oldest_request_time) + 0.1  # 加 0.1 秒緩衝
+            
+            if wait_time > 0:
+                logger.debug(f"速率限制：等待 {wait_time:.2f} 秒後繼續查詢")
+                time.sleep(wait_time)
+                # 重新計算當前時間並清理舊請求
+                current_time = time.time()
+                while self._request_timestamps and \
+                      current_time - self._request_timestamps[0] >= self._rate_limit_window:
+                    self._request_timestamps.popleft()
+        
+        # 記錄此次查詢時間
+        self._request_timestamps.append(time.time())
+    
     def fetch_multiple_stocks_kbars(
         self,
         stock_codes: List[str],
@@ -226,6 +270,9 @@ class MarketDataFetcher:
         
         for stock_code in stock_codes:
             try:
+                # 速率限制：等待直到可以進行下一次查詢
+                self._wait_for_rate_limit()
+                
                 df = self.fetch_stock_kbars(stock_code, date_range)
                 if df is not None and not df.empty:
                     all_data.append(df)
@@ -274,6 +321,9 @@ class MarketDataFetcher:
         
         # 取得所有股票代碼
         stock_symbols = self.get_all_stock_symbols()
+
+        # 只留下 stock_symbols 中只有四個數字的元素
+        stock_symbols = [symbol for symbol in stock_symbols if isinstance(symbol, str) and symbol.isdigit() and len(symbol) == 4]
         
         # 批量抓取資料
         result_df = self.fetch_multiple_stocks_kbars(
