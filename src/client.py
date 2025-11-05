@@ -59,8 +59,8 @@ class SinotradeClient:
         # 初始化認證服務
         self._auth_service = AuthenticationService(self._api)
         
-        # 設定日誌等級
-        logging.basicConfig(level=getattr(logging, log_level))
+        # 設定模組特定的日誌等級
+        logger.setLevel(getattr(logging, log_level))
         logger.info(f"客戶端已初始化 (模擬環境: {simulation})")
     
     def login(
